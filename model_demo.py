@@ -1,7 +1,5 @@
 import math
 import os
-from urllib.request import AbstractDigestAuthHandler
-from winsound import SND_ASYNC
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import torch
 from torch import nn
@@ -492,7 +490,9 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	# save model
 	file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
 	file_name = model_name + '_' + file_time
-	pickle.dump(net, open(file_name, "wb"))
+
+	torch.save(net.state_dict(), file_name)
+	#pickle.dump(net, open(file_name, "wb"))
 
 
 
@@ -570,133 +570,134 @@ def predict_seq2seq(net, target_sequence_raw, amino_dict, num_steps, device, sav
 	return comple_peptide_pred, prob, attention_weight_seq
 
 
-if __name__=='__main__':
-
-	amino_dict = {
-			'<bos>': 0, 
-			'<eos>': 1, 
-			'<pad>': 2, 
-			'<unk>': 3,
-			'A': 4,
-			'C': 5,
-			'D': 6, 
-			'E': 7,
-			'F': 8, 
-			'G': 9, 
-			'H': 10,
-			'I': 11, 
-			'K': 12, 
-			'L': 13, 
-			'M': 14, 
-			'N': 15, 
-			'P': 16, 
-			'Q': 17, 
-			'R': 18, 
-			'S': 19, 
-			'T': 20, 
-			'V': 21, 
-			'W': 22, 
-			'Y': 23 
-			}
-
-	data_list_antiparallel= []
-	data_list_parallel= []
-
-	for i in range(1, 9):
-		with open('BSn_libraries/BSn_libraries_copy/anti_frag_dic_{}.pkl'.format(i), 'rb') as f:
-			data = pickle.load(f, encoding='latin1')
-			data_list_antiparallel.append(data)
-
-		with open('BSn_libraries/BSn_libraries_copy/para_frag_dic_{}.pkl'.format(i), 'rb') as f:
-			data = pickle.load(f, encoding='latin1')
-			data_list_parallel.append(data)
 
 
-	# 0 for parallel
-	# 1 for antiparallel
 
-	# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
-	BSn_data = []
-	least_length = 3
+amino_dict = {
+		'<bos>': 0, 
+		'<eos>': 1, 
+		'<pad>': 2, 
+		'<unk>': 3,
+		'A': 4,
+		'C': 5,
+		'D': 6, 
+		'E': 7,
+		'F': 8, 
+		'G': 9, 
+		'H': 10,
+		'I': 11, 
+		'K': 12, 
+		'L': 13, 
+		'M': 14, 
+		'N': 15, 
+		'P': 16, 
+		'Q': 17, 
+		'R': 18, 
+		'S': 19, 
+		'T': 20, 
+		'V': 21, 
+		'W': 22, 
+		'Y': 23 
+		}
 
-	for frag_i_data in data_list_parallel[least_length-1:]:
-		for keys in frag_i_data.keys():
+data_list_antiparallel= []
+data_list_parallel= []
 
-			length = len(keys)
-			for element in frag_i_data[keys]:
+for i in range(1, 9):
+	with open('BSn_libraries/BSn_libraries_copy/anti_frag_dic_{}.pkl'.format(i), 'rb') as f:
+		data = pickle.load(f, encoding='latin1')
+		data_list_antiparallel.append(data)
 
-				working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
-				list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 0]
-				BSn_data.append(list_i)
-
-	for frag_i_data in data_list_antiparallel[least_length-1:]:
-		for keys in frag_i_data.keys():
-			length = len(keys)
-			for element in frag_i_data[keys]:
-
-				working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
-				list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 1]
-				BSn_data.append(list_i)
-
-
-	print(len(BSn_data))
-	print(BSn_data[500000])
-	# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
-
-	BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)[:, 0:2]
-	scores_array = np.array(BSn_data, dtype=object)[:, 5].reshape(-1, 1)
-	BSn_data_dataset_scores = np.hstack([BSn_data_dataset_sequence, scores_array])
-
-	# here we manually eliminate those with sample negative weights
-	BSn_data_dataset1 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
-
-
-	num_steps_training = 10 # maximum length of training sequences
-
-	X_train, X_valid_len, Y_train, Y_valid_len = preprocess_train(BSn_data_dataset1[:, 0], BSn_data_dataset1[:, 1], amino_dict, num_steps_training)
-
-	working_score_tensor = torch.tensor(list(BSn_data_dataset1[:, 2]))
-
-	print(X_train.shape)
-	print(Y_train.shape)
-	print(X_valid_len.shape)
-	print(Y_valid_len.shape)
-	print(working_score_tensor.shape)
+	with open('BSn_libraries/BSn_libraries_copy/para_frag_dic_{}.pkl'.format(i), 'rb') as f:
+		data = pickle.load(f, encoding='latin1')
+		data_list_parallel.append(data)
 
 
-	query_size, key_size, value_size, num_hiddens = 32, 32, 32, 32
-	num_layers, dropout = 1, 0.1
-	lr, num_epochs, batch_size, label_smoothing = 0.005, 2, 6000, 0.1
-	ffn_num_input, ffn_num_hiddens, num_heads = 32, 64, 4
+# 0 for parallel
+# 1 for antiparallel
 
-	norm_shape = [32] # 32 corresponds to the dim of such number to normalize
-	device = d2l.try_gpu()
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
+BSn_data = []
+least_length = 3
 
+for frag_i_data in data_list_parallel[least_length-1:]:
+	for keys in frag_i_data.keys():
 
-	encoder_demo = TransformerEncoder(
-		len(amino_dict), key_size, query_size, value_size, num_hiddens, 
-		norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
-		num_layers, dropout)
-	decoder_demo = TransformerDecoder(
-		len(amino_dict), key_size, query_size, value_size, num_hiddens, 
-		norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
-		num_layers, dropout)
-	model_demo = EncoderDecoder(encoder_demo, decoder_demo)
+		length = len(keys)
+		for element in frag_i_data[keys]:
 
+			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 0]
+			BSn_data.append(list_i)
 
-	pytorch_total_params = sum(p.numel() for p in model_demo.parameters())
-	pytorch_total_trainable_params = sum(p.numel() for p in model_demo.parameters() if p.requires_grad)
+for frag_i_data in data_list_antiparallel[least_length-1:]:
+	for keys in frag_i_data.keys():
+		length = len(keys)
+		for element in frag_i_data[keys]:
 
-	print('total number of parameters: {}'.format(pytorch_total_params))
-	print('total number of trainable parameters: {}'.format(pytorch_total_trainable_params))
-
-
-	train_seq2seq(model_demo, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_demo')
+			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 1]
+			BSn_data.append(list_i)
 
 
-	target = ['SPT']
-	num_steps_prediction = 10 # max length of sequence to predict
+print(len(BSn_data))
+print(BSn_data[500000])
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
 
-	dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_demo, target[0], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)[:, 0:2]
+scores_array = np.array(BSn_data, dtype=object)[:, 5].reshape(-1, 1)
+BSn_data_dataset_scores = np.hstack([BSn_data_dataset_sequence, scores_array])
+
+# here we manually eliminate those with sample negative weights
+BSn_data_dataset1 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
+
+
+num_steps_training = 10 # maximum length of training sequences
+
+X_train, X_valid_len, Y_train, Y_valid_len = preprocess_train(BSn_data_dataset1[:, 0], BSn_data_dataset1[:, 1], amino_dict, num_steps_training)
+
+working_score_tensor = torch.tensor(list(BSn_data_dataset1[:, 2]))
+
+print(X_train.shape)
+print(Y_train.shape)
+print(X_valid_len.shape)
+print(Y_valid_len.shape)
+print(working_score_tensor.shape)
+
+
+query_size, key_size, value_size, num_hiddens = 32, 32, 32, 32
+num_layers, dropout = 1, 0.1
+lr, num_epochs, batch_size, label_smoothing = 0.005, 25, 6000, 0.1
+ffn_num_input, ffn_num_hiddens, num_heads = 32, 64, 4
+
+norm_shape = [32] # 32 corresponds to the dim of such number to normalize
+device = d2l.try_gpu()
+
+
+encoder_demo = TransformerEncoder(
+	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
+	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
+	num_layers, dropout)
+decoder_demo = TransformerDecoder(
+	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
+	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
+	num_layers, dropout)
+model_demo = EncoderDecoder(encoder_demo, decoder_demo)
+
+
+pytorch_total_params = sum(p.numel() for p in model_demo.parameters())
+pytorch_total_trainable_params = sum(p.numel() for p in model_demo.parameters() if p.requires_grad)
+
+print('total number of parameters: {}'.format(pytorch_total_params))
+print('total number of trainable parameters: {}'.format(pytorch_total_trainable_params))
+
+
+train_seq2seq(model_demo, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_demo')
+
+
+target = ['SPT']
+num_steps_prediction = 10 # max length of sequence to predict
+
+dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_demo, target[0], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
 
 
