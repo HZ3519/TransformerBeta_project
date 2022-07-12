@@ -410,7 +410,7 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps):
 
 # Here we enforce the first word <bos>
 
-def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name = 'model_demo'):
+def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo'):
 	"""Train a model for sequence to sequence."""
 
 	def xavier_init_weights(m):
@@ -423,7 +423,8 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 
 	net.apply(xavier_init_weights)
 	net.to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+	scheduler = LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
 	loss = MaskedSoftmaxCELoss()
 	net.train()
 	animator = d2l.Animator(xlabel='epoch', ylabel='loss')
@@ -465,6 +466,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 			d2l.grad_clipping(net, 1)
 			num_tokens = Y_valid_len_minibatch.sum()
 			optimizer.step()
+			scheduler.step()
 			with torch.no_grad():
 				metric.add(l*num_tokens, num_tokens) # loss per batch, num_tokens per batch
 
