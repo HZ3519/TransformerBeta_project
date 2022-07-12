@@ -471,6 +471,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		#if (epoch + 1) % 10 == 0:
 		animator.add(epoch + 1, (metric[0] / metric[1],))
 		y_loss.append(metric[0] / metric[1])
+		print("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]))
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
@@ -666,7 +667,7 @@ print(working_score_tensor.shape)
 
 query_size, key_size, value_size, num_hiddens = 256, 256, 256, 256
 num_layers, dropout = 4, 0.1
-lr, num_epochs, batch_size, label_smoothing = 0.005, 100, 2048, 0.1
+lr, num_epochs, batch_size, label_smoothing = 0.001, 10, 6000, 0.1
 ffn_num_input, ffn_num_hiddens, num_heads = 256, 1024, 8
 
 norm_shape = [256] # 32 corresponds to the dim of such number to normalize

@@ -471,6 +471,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		#if (epoch + 1) % 10 == 0:
 		animator.add(epoch + 1, (metric[0] / metric[1],))
 		y_loss.append(metric[0] / metric[1])
+		print("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]))
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
