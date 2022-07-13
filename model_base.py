@@ -413,18 +413,16 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps):
 def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo'):
 	"""Train a model for sequence to sequence."""
 
-	def xavier_init_weights(m):
-		if type(m) == nn.Linear:
-			nn.init.xavier_uniform_(m.weight)
-		if type(m) == nn.GRU:
-			for param in m._flat_weights_names:
-				if "weight" in param:
-					nn.init.xavier_uniform_(m._parameters[param])
+	def init_weights(module):
+		if isinstance(module, (nn.Linear)):
+			nn.init.normal_(module.weight, mean=0.0, std=0.01) # I always use 0.01 instead of 0.02
+		if isinstance(module, (nn.Embedding)):
+			nn.init.normal_(module.weight, mean=0.0, std=1e-5) # tiny values, instead of 0.01
 
-	net.apply(xavier_init_weights)
+	net.apply(init_weights)
 	net.to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-	scheduler = LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
 	loss = MaskedSoftmaxCELoss()
 	net.train()
 	animator = d2l.Animator(xlabel='epoch', ylabel='loss')
@@ -669,7 +667,7 @@ print(working_score_tensor.shape)
 
 query_size, key_size, value_size, num_hiddens = 256, 256, 256, 256
 num_layers, dropout = 4, 0.1
-lr, num_epochs, batch_size, label_smoothing = 0.001, 20, 6000, 0.1
+lr, num_epochs, batch_size, label_smoothing = 0.0004, 500, 6000, 0.1
 ffn_num_input, ffn_num_hiddens, num_heads = 256, 1024, 8
 
 norm_shape = [256] # 32 corresponds to the dim of such number to normalize
@@ -693,7 +691,7 @@ print('Base model: total number of parameters: {}'.format(model_base_total_param
 print('Base model: total number of trainable parameters: {}'.format(model_base_total_trainable_params))
 
 
-train_seq2seq(model_base, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_base', warm_up=4000)
+train_seq2seq(model_base, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_base', warmup=24000)
 
 
 target = ['SPY', 'SPQ', 'SFILKSFR', 'LDLRNFYQ', 'FGAILSS', 'NVGGAVVTG']

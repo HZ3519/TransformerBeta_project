@@ -413,18 +413,16 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps):
 def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo'):
 	"""Train a model for sequence to sequence."""
 
-	def xavier_init_weights(m):
-		if type(m) == nn.Linear:
-			nn.init.xavier_uniform_(m.weight)
-		if type(m) == nn.GRU:
-			for param in m._flat_weights_names:
-				if "weight" in param:
-					nn.init.xavier_uniform_(m._parameters[param])
+	def init_weights(module):
+		if isinstance(module, (nn.Linear)):
+			nn.init.normal_(module.weight, mean=0.0, std=0.01) # I always use 0.01 instead of 0.02
+		if isinstance(module, (nn.Embedding)):
+			nn.init.normal_(module.weight, mean=0.0, std=1e-5) # tiny values, instead of 0.01
 
-	net.apply(xavier_init_weights)
+	net.apply(init_weights)
 	net.to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-	scheduler = LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
 	loss = MaskedSoftmaxCELoss()
 	net.train()
 	animator = d2l.Animator(xlabel='epoch', ylabel='loss')
