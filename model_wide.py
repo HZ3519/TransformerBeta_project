@@ -665,12 +665,12 @@ print(Y_valid_len.shape)
 print(working_score_tensor.shape)
 
 
-query_size, key_size, value_size, num_hiddens = 256, 256, 256, 256
+query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
 num_layers, dropout = 4, 0.1
-lr, num_epochs, batch_size, label_smoothing = 0.01, 1800, 6000, 0.1
-ffn_num_input, ffn_num_hiddens, num_heads = 256, 1024, 8
+lr, num_epochs, batch_size, label_smoothing = 0.0004, 500, 6000, 0.1
+ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
 
-norm_shape = [256] # 32 corresponds to the dim of such number to normalize
+norm_shape = [512] # 32 corresponds to the dim of such number to normalize
 device = d2l.try_gpu()
 
 encoder_base = TransformerEncoder(
@@ -681,22 +681,22 @@ decoder_base = TransformerDecoder(
 	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
 	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
 	num_layers, dropout)
-model_base = EncoderDecoder(encoder_base, decoder_base)
+model_wide = EncoderDecoder(encoder_base, decoder_base)
 
 
-model_base_total_params = sum(p.numel() for p in model_base.parameters())
-model_base_total_trainable_params = sum(p.numel() for p in model_base.parameters() if p.requires_grad)
+model_wide_total_params = sum(p.numel() for p in model_wide.parameters())
+model_wide_total_trainable_params = sum(p.numel() for p in model_wide.parameters() if p.requires_grad)
 
-print('Base model: total number of parameters: {}'.format(model_base_total_params))
-print('Base model: total number of trainable parameters: {}'.format(model_base_total_trainable_params))
+print('Base model: total number of parameters: {}'.format(model_wide_total_params))
+print('Base model: total number of trainable parameters: {}'.format(model_wide_total_trainable_params))
 
 
-train_seq2seq(model_base, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_base', warmup=350000)
+train_seq2seq(model_wide, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_wide', warmup=35000)
 
 
 target = ['SPY', 'SPQ', 'SFILKSFR', 'LDLRNFYQ', 'FGAILSS', 'NVGGAVVTG']
 num_steps_prediction = 10 # max length of sequence to predict
 
-dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_base, target[4], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_wide, target[4], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
 
 
