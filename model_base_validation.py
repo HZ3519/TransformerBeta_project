@@ -386,10 +386,16 @@ class MaskedSoftmaxCELoss(nn.CrossEntropyLoss):
 		return weighted_average_masked_loss
 
 
+def hamming_distance(seq_pred, seq_true):
+	"""Return the Hamming distance between 2 equal lists of equal-length sequences(list of number)."""
+
+	return np.array([(x!=y).sum() for x, y in zip(seq_pred, seq_true)]).sum()
+
+
+
 
 # input: list of training target sequences, list of training complementary peptides 
-
-def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps):
+def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps, X_validation_letter=None, Y_validation_letter=None):
 
 	X_train_letter_split = [list(sequence) for sequence in X_train_letter]
 	Y_train_letter_split = [list(sequence) for sequence in Y_train_letter]
@@ -404,13 +410,29 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps):
 	Y_train = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in Y_train_unpad])
 	# 2 more space for bos and eos 
 
+	if X_validation_letter is not None:
+
+		X_validation_letter_split = [list(sequence) for sequence in X_validation_letter]
+		Y_validation_letter_split = [list(sequence) for sequence in Y_validation_letter]
+
+		X_validation_unpad= [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in X_validation_letter_split]
+		Y_validation_unpad = [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in Y_validation_letter_split]
+
+		X_validation_valid_len = torch.tensor([len(sequence) for sequence in X_validation_unpad])
+		Y_validation_valid_len = torch.tensor([len(sequence) for sequence in Y_validation_unpad])
+
+		X_validation = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in X_validation_unpad])
+		Y_validation = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in Y_validation_unpad])
+		
+		return X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len
+
 	return X_train, X_valid_len, Y_train, Y_valid_len
 
 
 
 # Here we enforce the first word <bos>
 
-def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo'):
+def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
 	"""Train a model for sequence to sequence."""
 
 	def init_weights(module):
@@ -425,12 +447,17 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
 	loss = MaskedSoftmaxCELoss()
 	net.train()
+
 	animator = d2l.Animator(xlabel='epoch', ylabel='loss')
-	y_loss = []
-	#animator = d2l.Animator(xlabel='batch', ylabel='loss')
+	training_loss = []
+	validation_score = []
 
 
 	for epoch in range(num_epochs):
+		
+		# training step
+		net.train()
+
 		timer = d2l.Timer()
 		metric = d2l.Accumulator(2)  # Sum of training loss, no. of tokens
 
@@ -448,6 +475,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		Y_train_batch = torch.split(Y_train_shuffled, batch_size)
 		Y_valid_len_batch = torch.split(Y_valid_len_shuffled, batch_size)
 		sample_weights_batch = torch.split(sample_weights_shuffled, batch_size)
+
 
 
 		for batch in zip(X_train_batch, X_valid_len_batch, Y_train_batch, Y_valid_len_batch, sample_weights_batch):
@@ -468,19 +496,68 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 			with torch.no_grad():
 				metric.add(l*num_tokens, num_tokens) # loss per batch, num_tokens per batch
 
-		#if (epoch + 1) % 10 == 0:
+		# print + save training loss at each epoch
 		animator.add(epoch + 1, (metric[0] / metric[1],))
-		y_loss.append(metric[0] / metric[1])
+		training_loss.append(metric[0] / metric[1])
 		print("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]))
 
+		# evaluation step:
+		if X_validation is not None:
+			net.eval()
+
+			with torch.no_grad():
+				# set device
+				softmax_layer = nn.Softmax(dim=2)
+				X_validation = X_validation.to(device)
+				X_validation_valid_len = X_validation_valid_len.to(device)
+				Y_validation = Y_validation.to(device)
+				Y_validation_valid_len = Y_validation_valid_len.to(device)
+
+				# teacher force Y_truth
+				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0],
+									device=device).reshape(-1, 1)
+				Y_true = torch.cat([bos, Y_validation[:, :-1]], 1)  # Teacher forcing -------> the first word at all batch is <bos> + keep total length same
+				Y_true = Y_true.type(torch.int32)
+
+				# construct Y_pred
+				enc_outputs = net.encoder(X_validation, X_validation_valid_len) # encoder only use X infomation
+				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
+
+				dec_X = torch.tensor([amino_dict['<bos>']] * X_validation.shape[0],
+									device=device).reshape(-1, 1) # only use info from X
+
+				for i in range(Y_validation.shape[1]-1): # here we have <bos> in pos 0
+
+						Y_raw, dec_state = net.decoder(dec_X, dec_state)
+
+						# apply softmax to the output
+						Y = softmax_layer(Y_raw)
+
+						# We use the token with the highest prediction likelihood as the input
+						# of the decoder at the next time step
+						dec_X = Y.argmax(dim=2)
+						Y_pred = dec_X.type(torch.int32) # (batch, 1)
+
+						# we fill in prediction and do not stop
+
+				# concatenate last prediction with previous ones svaed by the model
+				Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+				
+				# evaluate + print + save validation metric at each epoch
+				hamming_scores = hamming_distance(Y_pred, Y_true)
+				validation_score.append(hamming_scores)
+				print("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores))
+
+
+	# print useful info after all
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
-	# save loss plot
+
+	# save training loss plot
 	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
 	x = list(range(1, num_epochs+1))
 	file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
-	plt.plot(x,y_loss,label="weighted_average_loss")
-
+	plt.plot(x,training_loss,label="weighted_average_loss")
 	plt.xlabel('Epochs')
 	plt.ylabel('Weighted average loss')
 	plt.title("transformer <{}> training loss".format(model_name))
@@ -488,8 +565,20 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	plt.legend()
 	plt.savefig('{}_lossplot_{}.png'.format(model_name, file_time))
 
-	# save model
-	file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
+	# save validation metic plot
+	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+	x = list(range(1, num_epochs+1))
+	plt.plot(x,validation_score,label="hamming_distance")
+	plt.xlabel('Epochs')
+	plt.ylabel('Hamming distance sum')
+	plt.title("transformer <{}> validation scores".format(model_name))
+	plt.grid()
+	plt.legend()
+	plt.savefig('{}_validationplot_{}.png'.format(model_name, file_time))
+	
+
+	# save model weights
+	#file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
 	file_name = model_name + '_' + file_time
 
 	torch.save(net.state_dict(), file_name)
@@ -644,25 +733,72 @@ print(len(BSn_data))
 print(BSn_data[500000])
 # target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
 
+
+
+# assign working scores and remove bad samples
+
 BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)[:, 0:2]
 scores_array = np.array(BSn_data, dtype=object)[:, 5].reshape(-1, 1)
 BSn_data_dataset_scores = np.hstack([BSn_data_dataset_sequence, scores_array])
 
 # here we manually eliminate those with sample negative weights
 BSn_data_dataset1 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
+BSn_data_dataset2 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
 
+
+
+
+BSn_data_dataset2_target = BSn_data_dataset2[:, 0]
+BSn_data_dataset2_target_unique_value, BSn_data_dataset2_target_unique_indices = np.unique(BSn_data_dataset2_target, return_index=True) # unique values 
+
+condition = np.nonzero(np.array([len(sequence)==8 for sequence in BSn_data_dataset2_target_unique_value]))
+BSn_data_dataset2_target_unique_indices_length8 = BSn_data_dataset2_target_unique_indices[condition] # unique and length 8
+
+# set seed
+np.random.seed(0)
+validation_indices = np.random.choice(BSn_data_dataset2_target_unique_indices_length8, size=5000, replace=False)
+
+X_train_letter = np.delete(BSn_data_dataset2[:, 0], validation_indices, axis=0)
+Y_train_letter = np.delete(BSn_data_dataset2[:, 1], validation_indices, axis=0)
+X_validation_letter = BSn_data_dataset2[validation_indices, 0]
+Y_validation_letter = BSn_data_dataset2[validation_indices, 1]
+
+print(BSn_data_dataset2_target_unique_value.shape)
+print(BSn_data_dataset2_target_unique_indices.shape)
+print(BSn_data_dataset2_target_unique_indices_length8.shape)
+print(validation_indices)
+print("------------data below---------")
+print(X_train_letter.shape)
+print(Y_train_letter.shape)
+print(X_validation_letter.shape)
+print(Y_validation_letter.shape)
+
+
+# split the data in training and validation
 
 num_steps_training = 10 # maximum length of training sequences
 
-X_train, X_valid_len, Y_train, Y_valid_len = preprocess_train(BSn_data_dataset1[:, 0], BSn_data_dataset1[:, 1], amino_dict, num_steps_training)
+X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps_training, X_validation_letter=X_validation_letter, Y_validation_letter=Y_validation_letter)
 
-working_score_tensor = torch.tensor(list(BSn_data_dataset1[:, 2]))
+working_score_tensor = torch.tensor(list(np.delete(BSn_data_dataset2[:, 2], validation_indices, axis=0)))
 
+print('---------training info----------')
 print(X_train.shape)
 print(Y_train.shape)
 print(X_valid_len.shape)
 print(Y_valid_len.shape)
 print(working_score_tensor.shape)
+print('---------validation info------------')
+print(X_validation.shape)
+print(Y_validation.shape)
+print(X_validation_valid_len.shape)
+print(Y_validation_valid_len.shape)
+
+
+
+
+
+
 
 
 query_size, key_size, value_size, num_hiddens = 256, 256, 256, 256
@@ -691,12 +827,13 @@ print('Base model: total number of parameters: {}'.format(model_base_total_param
 print('Base model: total number of trainable parameters: {}'.format(model_base_total_trainable_params))
 
 
-train_seq2seq(model_base, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_base', warmup=16000)
+train_seq2seq(model_base, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_base_validation', warmup=16000, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
 
 
-target = ['SPY', 'SPQ', 'SFILKSFR', 'LDLRNFYQ', 'FGAILSS', 'NVGGAVVTG']
-num_steps_prediction = 10 # max length of sequence to predict
+seen_target = ['VESTCVLN', 'LDLRNFYQ']
+unseen_target = ['LTHRFTHN', 'LVFGQSWN', 'EQVTNVGG']
+num_steps_prediction = 15 # max length of target sequence to predict
 
-dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_base, target[4], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_base, seen_target[2], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
 
 
