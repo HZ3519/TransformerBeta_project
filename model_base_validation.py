@@ -388,8 +388,10 @@ class MaskedSoftmaxCELoss(nn.CrossEntropyLoss):
 
 def hamming_distance(seq_pred, seq_true):
 	"""Return the Hamming distance between 2 equal lists of equal-length sequences(list of number)."""
+	
+	hd_list = [(x!=y).sum() for x, y in zip(seq_pred, seq_true)]
 
-	return np.array([(x!=y).sum() for x, y in zip(seq_pred, seq_true)]).sum()
+	return torch.sum(torch.stack(hd_list))
 
 
 
