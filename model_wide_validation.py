@@ -547,7 +547,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				
 				# evaluate + print + save validation metric at each epoch
 				hamming_scores = hamming_distance(Y_pred, Y_true)
-				validation_score.append(hamming_scores)
+				validation_score.append(hamming_scores.cpu().numpy())
 				print("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores))
 
 
@@ -836,6 +836,6 @@ seen_target = ['VESTCVLN', 'LDLRNFYQ']
 unseen_target = ['LTHRFTHN', 'LVFGQSWN', 'EQVTNVGG']
 num_steps_prediction = 15 # max length of target sequence to predict
 
-dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_wide, seen_target[2], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_wide, unseen_target[2], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
 
 
