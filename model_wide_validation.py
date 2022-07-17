@@ -3,6 +3,7 @@ import os
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import torch
 from torch import nn
+from torch.distributions.categorical import Categorical
 from d2l import torch as d2l
 import pandas as pd
 import pickle
@@ -598,7 +599,8 @@ def get_key(val, my_dict):
     return "key doesn't exist"
 
 
-def predict_seq2seq(net, target_sequence_raw, amino_dict, num_steps, device, save_attention_weights=False, print_info=False):
+# greedy single prediction with attention weights saved
+def predict_greedy_single(net, target_sequence_raw, amino_dict, num_steps, device, save_attention_weights=False, print_info=False):
 	"""Predict for sequence to sequence."""
 
 	softmax_layer = nn.Softmax(dim=2)
@@ -624,7 +626,6 @@ def predict_seq2seq(net, target_sequence_raw, amino_dict, num_steps, device, sav
 	prob = 1
 
 	for i in range(num_steps):
-
 
 		Y_raw, dec_state = net.decoder(dec_X, dec_state)
 
@@ -660,6 +661,202 @@ def predict_seq2seq(net, target_sequence_raw, amino_dict, num_steps, device, sav
 		print("Condition on input, predicted probability is {}".format(prob))
 
 	return comple_peptide_pred, prob, attention_weight_seq
+
+# greedy batch prediction (equal length target)
+# num_step chosen to be appropriate avoid unnecessary computational cost and correct final prediction -- prediction length + 1 + 1
+# prob includes <eos> position
+def predict_greedy_batch(net, target_sequence_list, amino_dict, num_steps, device):
+	"""Predict for lists of target sequence to lists of complementary peptides sequence."""
+
+	# Set `net` to eval mode for inference
+	net.eval()
+	softmax_layer = nn.Softmax(dim=2)
+
+	# Preprocess batched target sequence list   
+	target_sequence_list_split = [list(sequence) for sequence in target_sequence_list]
+	target_sequence_unpad= [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in target_sequence_list_split]
+	target_valid_len = torch.tensor([len(target_sequence_unpad) for sequence in target_sequence_unpad], dtype=torch.long, device=device)
+	target_sequence_batch = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in target_sequence_unpad], dtype=torch.long, device=device)
+
+	# Encode target data
+	enc_outputs = net.encoder(target_sequence_batch, target_valid_len)
+	dec_state = net.decoder.init_state(enc_outputs, target_valid_len)
+
+	# teacher enforce first 
+	dec_X = torch.tensor([amino_dict['<bos>']] * target_sequence_batch.shape[0], device=device).reshape(-1, 1) # only use info from X
+	
+	# track probability
+	prob = torch.tensor([1] * target_sequence_batch.shape[0], device=device).reshape(-1, 1)
+
+	for i in range(num_steps-1): # here we have <bos> in pos 0
+
+			Y_raw, dec_state = net.decoder(dec_X, dec_state)
+
+			# apply softmax to the output
+			Y = softmax_layer(Y_raw)
+
+			# We use the token with the highest prediction likelihood as the input
+			# of the decoder at the next time step
+			dec_X = Y.argmax(dim=2)
+			Y_pred = dec_X.type(torch.int32) # (batch, 1)
+
+			# track prob
+			prob_i = torch.max(Y, dim=2).values.squeeze(dim=0)
+			prob = torch.mul(prob, prob_i)
+
+			# we fill in prediction and do not stop
+
+	# concatenate last prediction with previous ones saved by the model
+	Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+
+	# join all prediction string back 
+	comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred[:, 1:-1]]
+
+	# put info together 
+	final = zip(target_sequence_list, comple_peptide_pred, prob.reshape(-1).tolist())
+	return list(final) # to print zip object
+
+
+
+# Given one target sequence, sample a list of unique probable candidates
+# 2 common reasons: select a few less good candidates or select one better than greedy
+# 2 common uses: sample a large number if enough memory (not recommended) or select a small number but repeat frequently
+# note: repeatation is possible since last token not shown or rounding error
+
+
+
+def sample_candidates(net, target_sequence_raw, num_candidates, amino_dict, num_steps, device, max_iter=100):
+	"""Given one target sequence, sample a list of unique probable candidates."""
+	
+	# Set `net` to eval mode for inference
+	net.eval()
+	softmax_layer = nn.Softmax(dim=2)
+	target_sequence = list(target_sequence_raw)
+
+	# num_remaining to produce
+	num_remaining = num_candidates
+
+	# track pred and prob 
+	Y_pred_track = torch.tensor([1] *num_steps, device=device, dtype=torch.int32).reshape(1, -1) # only use info from X
+	prob_track = torch.tensor([1], device=device).reshape(1, 1) # only use info from X
+
+	# move out for stability
+	target_sequence_unpad = [amino_dict[letter] for letter in target_sequence] + [amino_dict['<eos>']]
+
+	# track total number 
+	samples_total = 0
+
+	for j in range(max_iter):
+
+		# Preprocess batched target sequence
+		target_valid_len = torch.tensor([len(target_sequence_unpad)], dtype=torch.long, device=device).repeat_interleave(num_remaining*2)
+		target_sequence = torch.tensor(d2l.truncate_pad(target_sequence_unpad, num_steps, amino_dict['<pad>']), dtype=torch.long, device=device)
+		target_sequence_batch = target_sequence.repeat(num_remaining*2, 1)
+
+		# Encode target data
+		enc_outputs = net.encoder(target_sequence_batch, target_valid_len)
+		dec_state = net.decoder.init_state(enc_outputs, target_valid_len)
+
+		# teacher enforce first 
+		dec_X = torch.tensor([amino_dict['<bos>']] * target_sequence_batch.shape[0], device=device).reshape(-1, 1) # only use info from X
+		
+		# track probability
+		prob = torch.tensor([1] * target_sequence_batch.shape[0], dtype = torch.float32, device=device).reshape(-1, 1)
+
+
+		for i in range(num_steps-1): # here we have <bos> in pos 0
+
+				Y_raw, dec_state = net.decoder(dec_X, dec_state)
+
+				# apply softmax to the output
+				Y = softmax_layer(Y_raw)
+
+				# We sample a token from the probability distribution as the input
+				# of the decoder at the next time step
+				
+				m = Categorical(probs=Y)
+				dec_X = m.sample()
+				Y_pred = dec_X.type(torch.int32) # (batch, 1)
+				
+				index = Y_pred.type(torch.int64)
+				# track prob
+				prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
+				prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
+				prob = torch.mul(prob, prob_i)
+
+
+				# we fill in prediction and do not stop
+
+		# concatenate last prediction with previous ones saved by the model
+		Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+		samples_total += Y_pred.shape[0]
+
+		# keep unique ones, remove repeated ones pred and prob
+		comb_set = torch.cat((Y_pred, prob), dim=1)
+		comb_set_unique = torch.unique(comb_set, dim=0, sorted=False)
+		Y_pred_unique = comb_set_unique[:, :-1]
+		prob_unique = comb_set_unique[:, -1].reshape(-1, 1)
+
+		# keep track
+		Y_pred_track = torch.cat((Y_pred_track, Y_pred_unique), dim=0)
+		prob_track = torch.cat((prob_track, prob_unique), dim=0)
+
+		# remove the track first rows
+		if j==0:
+			Y_pred_track = Y_pred_track[1:, :]
+			prob_track = prob_track[1:, :]
+
+		# check whether we have enough candidates, if yes stop and produce the required amount
+		if Y_pred_track.shape[0] >= num_candidates:
+	
+				# join all prediction string back 
+				comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred_track[:, 1:-1]]
+
+				prob_track = prob_track.reshape(-1).tolist()
+
+				dtype = [('peptide', '<U21'), ('prob', float)]
+				values = list(zip(comple_peptide_pred, prob_track))
+
+				a = np.array(values, dtype=dtype)
+
+				final = list(np.sort(a, order='prob')[-1::-1])
+
+				print("number of total candidates sampled: {}".format(samples_total))
+				print("number of unique top candidates successfully sampled: {}".format(num_candidates))
+				return final[0:num_candidates]
+
+
+		# if not update remaining
+		num_remaining = num_candidates - Y_pred_track.shape[0]
+
+	# if exceeds maximum iteration, stop and return all produced 
+
+	# join all prediction string back 
+	comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred_track[:, 1:-1]]
+
+	prob_track = prob_track.reshape(-1).tolist()
+
+	dtype = [('peptide', '<U21'), ('prob', float)]
+	values = list(zip(comple_peptide_pred, prob_track))
+
+	a = np.array(values, dtype=dtype)
+	final = list(np.sort(a, order='prob')[-1::-1])
+
+	print("number of total candidates sampled: {}".format(samples_total))
+	print("number of unique candidates successfully sampled: {}".format(len(final)))
+	return final
+
+
+def search_target(list, seq):
+	"""Search whether one target are in the dataset or not."""
+
+	return list[list[:, 0]==seq]
+
+
+
+
+
+
 
 
 
@@ -703,11 +900,10 @@ for i in range(1, 9):
 		data = pickle.load(f, encoding='latin1')
 		data_list_parallel.append(data)
 
-
 # 0 for parallel
 # 1 for antiparallel
 
-# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti, freq
 BSn_data = []
 least_length = 3
 
@@ -715,59 +911,64 @@ for frag_i_data in data_list_parallel[least_length-1:]:
 	for keys in frag_i_data.keys():
 
 		length = len(keys)
+		freq = len(frag_i_data[keys])
 		for element in frag_i_data[keys]:
 
 			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
-			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 0]
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 0, freq]
 			BSn_data.append(list_i)
 
 for frag_i_data in data_list_antiparallel[least_length-1:]:
 	for keys in frag_i_data.keys():
+
 		length = len(keys)
+		freq = len(frag_i_data[keys])
 		for element in frag_i_data[keys]:
 
 			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
-			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 1]
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 1, freq]
 			BSn_data.append(list_i)
 
 
 print(len(BSn_data))
-print(BSn_data[500000])
-# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti
+print(BSn_data[2100004])
+print(BSn_data[2100005])
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti, freq
 
 
 
 # assign working scores and remove bad samples
 
-BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)[:, 0:2]
-scores_array = np.array(BSn_data, dtype=object)[:, 5].reshape(-1, 1)
-BSn_data_dataset_scores = np.hstack([BSn_data_dataset_sequence, scores_array])
+BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)
 
 # here we manually eliminate those with sample negative weights
-BSn_data_dataset1 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
-BSn_data_dataset2 = BSn_data_dataset_scores[BSn_data_dataset_scores[:, 2] >= 0]
+BSn_data_dataset1 = np.array(BSn_data_dataset_sequence[BSn_data_dataset_sequence[:, 5] >= 0])
+BSn_data_dataset2 = np.array(BSn_data_dataset_sequence[BSn_data_dataset_sequence[:, 5] >= 0])
 
 
 
+# or the follow two cells: 5000 unique length 8 seq
 
-BSn_data_dataset2_target = BSn_data_dataset2[:, 0]
-BSn_data_dataset2_target_unique_value, BSn_data_dataset2_target_unique_indices = np.unique(BSn_data_dataset2_target, return_index=True) # unique values 
+target_indices = np.arange(BSn_data_dataset2.shape[0]).reshape(-1, 1)
+BSn_data_dataset2_indices = np.hstack([BSn_data_dataset2, target_indices])
 
-condition = np.nonzero(np.array([len(sequence)==8 for sequence in BSn_data_dataset2_target_unique_value]))
-BSn_data_dataset2_target_unique_indices_length8 = BSn_data_dataset2_target_unique_indices[condition] # unique and length 8
+condition1 = np.nonzero(np.array([len(sequence)==8 for sequence in BSn_data_dataset2_indices[:, 0]]))
+BSn_data_dataset2_indices_length8 = BSn_data_dataset2_indices[condition1]
+
+condition2 = np.nonzero(np.array([freq==1 for freq in BSn_data_dataset2_indices_length8[:, -2]]))
+BSn_data_dataset2_indices_length8_unique = BSn_data_dataset2_indices_length8[condition2]
 
 # set seed
 np.random.seed(0)
-validation_indices = np.random.choice(BSn_data_dataset2_target_unique_indices_length8, size=5000, replace=False)
+validation_indices = np.random.choice(BSn_data_dataset2_indices_length8_unique[:, -1], size=5000, replace=False).astype(np.int32)
 
 X_train_letter = np.delete(BSn_data_dataset2[:, 0], validation_indices, axis=0)
 Y_train_letter = np.delete(BSn_data_dataset2[:, 1], validation_indices, axis=0)
 X_validation_letter = BSn_data_dataset2[validation_indices, 0]
 Y_validation_letter = BSn_data_dataset2[validation_indices, 1]
 
-print(BSn_data_dataset2_target_unique_value.shape)
-print(BSn_data_dataset2_target_unique_indices.shape)
-print(BSn_data_dataset2_target_unique_indices_length8.shape)
+print("number of length 8 samples: ", BSn_data_dataset2_indices_length8.shape)
+print("number of unique length 8 sample: ", BSn_data_dataset2_indices_length8_unique.shape)
 print(validation_indices)
 print("------------data below---------")
 print(X_train_letter.shape)
@@ -782,20 +983,19 @@ num_steps_training = 10 # maximum length of training sequences
 
 X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps_training, X_validation_letter=X_validation_letter, Y_validation_letter=Y_validation_letter)
 
-working_score_tensor = torch.tensor(list(np.delete(BSn_data_dataset2[:, 2], validation_indices, axis=0)))
+working_score_tensor = torch.tensor(list(np.delete(BSn_data_dataset2[:, 5], validation_indices, axis=0)))
 
 print('---------training info----------')
 print(X_train.shape)
 print(Y_train.shape)
 print(X_valid_len.shape)
 print(Y_valid_len.shape)
-print(working_score_tensor.shape)
+print(working_score_tensor[:20])
 print('---------validation info------------')
 print(X_validation.shape)
 print(Y_validation.shape)
 print(X_validation_valid_len.shape)
 print(Y_validation_valid_len.shape)
-
 
 
 
@@ -832,10 +1032,40 @@ print('Base model: total number of trainable parameters: {}'.format(model_wide_t
 train_seq2seq(model_wide, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_wide_validation', warmup=35000, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
 
 
-seen_target = ['VESTCVLN', 'LDLRNFYQ']
-unseen_target = ['LTHRFTHN', 'LVFGQSWN', 'EQVTNVGG']
-num_steps_prediction = 15 # max length of target sequence to predict
 
-dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_seq2seq(model_wide, unseen_target[2], amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+
+
+
+
+
+# interesting examples to demonstrate the power of the model
+
+PNAS_targets = 'EQVTNVGG'
+interesting_target_1 = 'QDVLLVAQ' # PDB labels = ['KSKTYAIS']
+
+# greedy single prediction
+num_steps_prediction = 10 # max length of target sequence to predict - set expected length + 1 + 1
+
+dec_comple_peptide_pred, dec_prob, dec_attention_weight_seq = predict_greedy_single(model_wide, 'ITLESGEF', amino_dict, num_steps_prediction, device, save_attention_weights=True, print_info=True)
+
+
+
+# greedy batch prediction
+num_steps_prediction = 10
+
+print(X_validation_letter[:50])
+print(Y_validation_letter[:50])
+
+peptide_pred = predict_greedy_batch(model_wide, X_validation_letter[:50], amino_dict, num_steps_prediction, device)
+print(peptide_pred)
+
+
+# unique top candidates sampling
+num_candidates = 100 # 100 is recommended
+num_steps_prediction = 10
+max_iter = 20
+
+peptide_candidates = sample_candidates(model_wide, 'ITLESGEF', num_candidates, amino_dict, num_steps_prediction, device, max_iter=max_iter)
+peptide_candidates
 
 
