@@ -7,6 +7,7 @@ import time
 import matplotlib.pyplot as plt 
 
 
+
 class MaskedSoftmaxCELoss(nn.CrossEntropyLoss):
 	"""The softmax cross-entropy loss with masks."""
 
