@@ -1,9 +1,8 @@
-
-
 def search_target(seq_list, seq):
 	"""Search whether one target are in the dataset or not."""
 
 	return seq_list[seq_list[:, 0]==seq]
+
 
 
 def window_divide(sequence, windown_size):

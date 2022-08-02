@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 import math
-from torch.distributions.categorical import Categorical
 from d2l import torch as d2l
+
 
 
 def sequence_mask(X, valid_len, value=0):
@@ -13,6 +13,7 @@ def sequence_mask(X, valid_len, value=0):
 
 	X[~mask] = value 
 	return X 
+
 
 
 def masked_softmax(X, valid_lens):
@@ -30,6 +31,7 @@ def masked_softmax(X, valid_lens):
 		return nn.functional.softmax(X.reshape(shape), dim=-1)
 
 
+
 def transpose_qkv(X, num_heads):
 	"""Transposition for parallel computation of multiple attention heads."""
 
@@ -39,6 +41,7 @@ def transpose_qkv(X, num_heads):
 	return X.reshape(-1, X.shape[2], X.shape[3])
 
 
+
 def transpose_output(X, num_heads):
 	"""Reverse the operation of transpose_qkv."""
 
@@ -46,6 +49,7 @@ def transpose_output(X, num_heads):
 	X = X.permute(0, 2, 1, 3)
 
 	return X.reshape(X.shape[0], X.shape[1], -1)
+
 
 
 class PositionalEncoding(nn.Module):
@@ -64,6 +68,7 @@ class PositionalEncoding(nn.Module):
 		return self.dropout(X)
 
 
+
 class DotProductAttention(nn.Module):
 	""""Scaled dot product attention with dropout."""
 
@@ -76,6 +81,7 @@ class DotProductAttention(nn.Module):
 		scores = torch.bmm(queries, keys.transpose(1, 2)) / math.sqrt(d)
 		self.attention_weights = masked_softmax(scores, valid_lens)
 		return torch.bmm(self.dropout(self.attention_weights), values)
+
 
 
 class MultiHeadAttention(nn.Module):
@@ -104,6 +110,7 @@ class MultiHeadAttention(nn.Module):
 		return self.W_o(output_concat)
 
 
+
 class PositionWiseFFN(nn.Module):
 	"""Positionwise feed-forward network."""
 
@@ -117,6 +124,7 @@ class PositionWiseFFN(nn.Module):
 		return self.dense2(self.relu(self.dense1(X)))
 
 
+
 class AddNorm(nn.Module):
 	"""Residual connection followed by layer normalization with dropout implementation."""
 
@@ -127,6 +135,7 @@ class AddNorm(nn.Module):
 
 	def forward(self, X, Y): 
 		return self.ln(self.dropout(Y) + X)
+
 
 
 class EncoderBlock(nn.Module):
@@ -142,6 +151,7 @@ class EncoderBlock(nn.Module):
 	def forward(self, X, valid_lens):
 		Y = self.addnorm1(X, self.attention(X, X, X, valid_lens))
 		return self.addnorm2(Y, self.ffn(Y))
+
 
 
 class TransformerEncoder(d2l.Encoder):
@@ -164,6 +174,7 @@ class TransformerEncoder(d2l.Encoder):
 			self.attention_weights[i] = blk.attention.attention.attention_weights
 		
 		return X
+
 
 
 class DecoderBlock(nn.Module):
@@ -190,6 +201,7 @@ class DecoderBlock(nn.Module):
 		Z = self.addnorm2(Y, Y2)
 
 		return self.addnorm3(Z, self.ffn(Z)), state 
+
 
 
 class TransformerDecoder(d2l.AttentionDecoder):
@@ -235,6 +247,7 @@ class TransformerDecoder(d2l.AttentionDecoder):
 
 	def attention_weights(self):
 		return self._attention_weights
+
 
 
 class EncoderDecoder(nn.Module):
