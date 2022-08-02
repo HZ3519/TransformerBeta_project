@@ -1,0 +1,206 @@
+import torch
+from torch import nn
+from d2l import torch as d2l
+from model_architecture import sequence_mask
+from model_metric import hamming_distance_training
+import time 
+import matplotlib.pyplot as plt 
+
+class MaskedSoftmaxCELoss(nn.CrossEntropyLoss):
+	"""The softmax cross-entropy loss with masks."""
+
+	def forward(self, pred, label, valid_len, sample_weights, label_smoothing):
+		masks = torch.ones_like(label)
+		masks = sequence_mask(masks, valid_len)
+		self.reduction = 'none'
+		self.label_smoothing = label_smoothing
+		unmaskeded_loss = super(MaskedSoftmaxCELoss, self).forward(pred.permute(0, 2, 1), label)
+		masked_loss = (unmaskeded_loss * masks).mean(dim=1) # mean of each batch along num_steps
+
+		weighted_masked_loss = masked_loss * sample_weights
+		weighted_average_masked_loss = weighted_masked_loss.sum() / sample_weights.sum()  # weighted average across batch
+		return weighted_average_masked_loss
+
+
+def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps, X_validation_letter=None, Y_validation_letter=None):
+
+	X_train_letter_split = [list(sequence) for sequence in X_train_letter]
+	Y_train_letter_split = [list(sequence) for sequence in Y_train_letter]
+
+	X_train_unpad= [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in X_train_letter_split]
+	Y_train_unpad = [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in Y_train_letter_split]
+
+	X_valid_len = torch.tensor([len(sequence) for sequence in X_train_unpad])
+	Y_valid_len = torch.tensor([len(sequence) for sequence in Y_train_unpad])
+
+	X_train = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in X_train_unpad])
+	Y_train = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in Y_train_unpad])
+	# 2 more space for bos and eos 
+
+	if X_validation_letter is not None:
+
+		X_validation_letter_split = [list(sequence) for sequence in X_validation_letter]
+		Y_validation_letter_split = [list(sequence) for sequence in Y_validation_letter]
+
+		X_validation_unpad= [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in X_validation_letter_split]
+		Y_validation_unpad = [[amino_dict[letter] for letter in sequence] + [amino_dict['<eos>']] for sequence in Y_validation_letter_split]
+
+		X_validation_valid_len = torch.tensor([len(sequence) for sequence in X_validation_unpad])
+		Y_validation_valid_len = torch.tensor([len(sequence) for sequence in Y_validation_unpad])
+
+		X_validation = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in X_validation_unpad])
+		Y_validation = torch.tensor([d2l.truncate_pad(sequence, num_steps, amino_dict['<pad>']) for sequence in Y_validation_unpad])
+		
+		return X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len
+
+	return X_train, X_valid_len, Y_train, Y_valid_len
+
+	
+def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
+	"""Train a model for sequence to sequence."""
+
+	def init_weights(module):
+		if isinstance(module, (nn.Linear)):
+			nn.init.normal_(module.weight, mean=0.0, std=0.01) # I always use 0.01 instead of 0.02
+		if isinstance(module, (nn.Embedding)):
+			nn.init.normal_(module.weight, mean=0.0, std=1e-5) # tiny values, instead of 0.01
+
+	net.apply(init_weights)
+	net.to(device)
+	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	loss = MaskedSoftmaxCELoss()
+	net.train()
+
+	animator = d2l.Animator(xlabel='epoch', ylabel='loss')
+	training_loss = []
+	validation_score = []
+
+
+	for epoch in range(num_epochs):
+		
+		# training step
+		net.train()
+
+		timer = d2l.Timer()
+		metric = d2l.Accumulator(2)  # Sum of training loss, no. of tokens
+
+		# random shuffle
+		index = torch.randperm(X_train.shape[0])
+		X_train_shuffled = X_train[index]
+		X_valid_len_shuffled = X_valid_len[index]
+		Y_train_shuffled = Y_train[index]
+		Y_valid_len_shuffled = Y_valid_len[index]
+		sample_weights_shuffled = sample_weights[index]
+
+		# batch operation at each epoch
+		X_train_batch = torch.split(X_train_shuffled, batch_size)
+		X_valid_len_batch = torch.split(X_valid_len_shuffled, batch_size)
+		Y_train_batch = torch.split(Y_train_shuffled, batch_size)
+		Y_valid_len_batch = torch.split(Y_valid_len_shuffled, batch_size)
+		sample_weights_batch = torch.split(sample_weights_shuffled, batch_size)
+
+
+
+		for batch in zip(X_train_batch, X_valid_len_batch, Y_train_batch, Y_valid_len_batch, sample_weights_batch):
+			
+			optimizer.zero_grad()
+			X_train_minibatch, X_valid_len_minibatch, Y_train_minibatch, Y_valid_len_minibatch, sample_weights_minibatch = [x.to(device) for x in batch]
+			bos = torch.tensor([amino_dict['<bos>']] * Y_train_minibatch.shape[0],
+								device=device).reshape(-1, 1)
+			dec_input = torch.cat([bos, Y_train_minibatch[:, :-1]], 1)  # Teacher forcing -------> the first word at all batch is <bos>
+			
+			Y_hat, _ = net(X_train_minibatch, dec_input, X_valid_len_minibatch)
+			l = loss(Y_hat, Y_train_minibatch, Y_valid_len_minibatch, sample_weights_minibatch, label_smoothing)
+			l.backward()  # l is loss per token
+			d2l.grad_clipping(net, 1)
+			num_tokens = Y_valid_len_minibatch.sum()
+			optimizer.step()
+			scheduler.step()
+			with torch.no_grad():
+				metric.add(l*num_tokens, num_tokens) # loss per batch, num_tokens per batch
+
+		# print + save training loss at each epoch
+		animator.add(epoch + 1, (metric[0] / metric[1],))
+		training_loss.append(metric[0] / metric[1])
+		print("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]))
+
+		# evaluation step:
+		if X_validation is not None:
+			net.eval()
+
+			with torch.no_grad():
+				# set device
+				softmax_layer = nn.Softmax(dim=2)
+				X_validation = X_validation.to(device)
+				X_validation_valid_len = X_validation_valid_len.to(device)
+				Y_validation = Y_validation.to(device)
+				Y_validation_valid_len = Y_validation_valid_len.to(device)
+
+				# teacher force Y_truth
+				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0],
+									device=device).reshape(-1, 1)
+				Y_true = torch.cat([bos, Y_validation[:, :-1]], 1)  # Teacher forcing -------> the first word at all batch is <bos> + keep total length same
+				Y_true = Y_true.type(torch.int32)
+
+				# construct Y_pred
+				enc_outputs = net.encoder(X_validation, X_validation_valid_len) # encoder only use X infomation
+				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
+
+				dec_X = torch.tensor([amino_dict['<bos>']] * X_validation.shape[0],
+									device=device).reshape(-1, 1) # only use info from X
+
+				for i in range(Y_validation.shape[1]-1): # here we have <bos> in pos 0
+
+						Y_raw, dec_state = net.decoder(dec_X, dec_state)
+
+						# apply softmax to the output
+						Y = softmax_layer(Y_raw)
+
+						# We use the token with the highest prediction likelihood as the input
+						# of the decoder at the next time step
+						dec_X = Y.argmax(dim=2)
+						Y_pred = dec_X.type(torch.int32) # (batch, 1)
+
+						# we fill in prediction and do not stop
+
+				# concatenate last prediction with previous ones saved by the model
+				Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+				
+				# evaluate + print + save validation metric at each epoch
+				hamming_scores = hamming_distance_training(Y_pred, Y_true)
+				validation_score.append(hamming_scores.cpu().numpy())
+				print("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores))
+
+
+	# print useful info after all
+	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
+
+	# save training loss plot
+	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+	x = list(range(1, num_epochs+1))
+	file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
+
+	plt.plot(x,training_loss,label="weighted_average_loss")
+	plt.xlabel('Epochs')
+	plt.ylabel('Weighted average loss')
+	plt.title("transformer <{}> training loss".format(model_name))
+	plt.grid()
+	plt.legend()
+	plt.savefig('{}_lossplot_{}.png'.format(model_name, file_time))
+
+	# save validation metic plot
+	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+	x = list(range(1, num_epochs+1))
+	plt.plot(x,validation_score,label="hamming_distance")
+	plt.xlabel('Epochs')
+	plt.ylabel('Hamming distance sum')
+	plt.title("transformer <{}> validation scores".format(model_name))
+	plt.grid()
+	plt.legend()
+	plt.savefig('{}_validationplot_{}.png'.format(model_name, file_time))
+	
+
+	# save model weights
+	file_name = model_name + '_' + file_time
+	torch.save(net.state_dict(), file_name)
