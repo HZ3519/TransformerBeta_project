@@ -156,12 +156,12 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
 				
 				hamming_scores = hamming_distance_training(Y_pred, Y_true)
-				validation_score_hamming.append(hamming_scores.cpu().numpy())
+				validation_score_hamming.append(hamming_scores.cpu().numpy().item())
 				print("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores))
 
 				sequence_accuracy_list = [torch.equal(a, b) for a, b in zip(Y_pred, Y_true)]
-				sequence_accuracy = torch.sum(torch.stack(sequence_accuracy_list)) / Y_true.shape[0]
-				validation_score_sequence_accuracy.append(sequence_accuracy.cpu().numpy())
+				sequence_accuracy = sum(sequence_accuracy_list) / Y_true.shape[0]
+				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("epoch {}, sequence accuracy: {}".format(epoch+1,sequence_accuracy))
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
@@ -179,33 +179,35 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	plt.legend()
 	plt.savefig('{}_lossplot_{}.png'.format(model_name, file_time))
 
-	# save validation hamming metic plot
-	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
-	x = list(range(1, num_epochs+1))
-	plt.plot(x,validation_score_hamming,label="hamming_distance")
-	plt.xlabel('Epochs')
-	plt.ylabel('Hamming distance sum')
-	plt.title("transformer <{}> validation hamming scores".format(model_name))
-	plt.grid()
-	plt.legend()
-	plt.savefig('{}_validationplot_hamming_{}.png'.format(model_name, file_time))
-	
-	# save validation sequence accuracy plot
-	plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
-	x = list(range(1, num_epochs+1))
-	plt.plot(x,validation_score_sequence_accuracy,label="sequence_accuracy")
-	plt.xlabel('Epochs')
-	plt.ylabel('Sequence accuracy')
-	plt.title("transformer <{}> validation sequence accuracy".format(model_name))
-	plt.grid()
-	plt.legend()
-	plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
+	if X_validation is not None:
+		# save validation hamming metic plot
+		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+		x = list(range(1, num_epochs+1))
+		plt.plot(x,validation_score_hamming,label="hamming_distance")
+		plt.xlabel('Epochs')
+		plt.ylabel('Hamming distance sum')
+		plt.title("transformer <{}> validation hamming scores".format(model_name))
+		plt.grid()
+		plt.legend()
+		plt.savefig('{}_validationplot_hamming_{}.png'.format(model_name, file_time))
+		
+		# save validation sequence accuracy plot
+		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+		x = list(range(1, num_epochs+1))
+		plt.plot(x,validation_score_sequence_accuracy,label="sequence_accuracy")
+		plt.xlabel('Epochs')
+		plt.ylabel('Sequence accuracy')
+		plt.title("transformer <{}> validation sequence accuracy".format(model_name))
+		plt.grid()
+		plt.legend()
+		plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
 
 	# save model weights
 	file_name = model_name + '_' + file_time
 	torch.save(net.state_dict(), file_name)
 
 	# save training_loss, validation_score_hamming, validation_score_sequence_accuracy
-	np.savetxt('training_loss.csv', training_loss, delimiter=',', fmt='%s')
-	np.savetxt('validation_score_hamming.csv', validation_score_hamming, delimiter=',', fmt='%s')
-	np.savetxt('validation_score_sequence_accuracy.csv', validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+	np.savetxt('{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
+	if X_validation is not None:
+		np.savetxt('{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
+		np.savetxt('{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
