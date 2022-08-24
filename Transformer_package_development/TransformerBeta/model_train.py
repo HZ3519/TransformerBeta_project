@@ -42,6 +42,8 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps, X_va
 
 	if X_validation_letter is not None:
 
+		num_steps = len(X_validation_letter[0]) + 2
+
 		X_validation_letter_split = [list(sequence) for sequence in X_validation_letter]
 		Y_validation_letter_split = [list(sequence) for sequence in Y_validation_letter]
 
