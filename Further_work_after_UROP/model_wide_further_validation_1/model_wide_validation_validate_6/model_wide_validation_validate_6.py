@@ -83,7 +83,7 @@ BSn_data_dataset2 = np.array(BSn_data_dataset_sequence[BSn_data_dataset_sequence
 target_indices = np.arange(BSn_data_dataset2.shape[0]).reshape(-1, 1)
 BSn_data_dataset2_indices = np.hstack([BSn_data_dataset2, target_indices])
 
-condition1 = np.nonzero(np.array([len(sequence)==8 for sequence in BSn_data_dataset2_indices[:, 0]]))
+condition1 = np.nonzero(np.array([len(sequence)==6 for sequence in BSn_data_dataset2_indices[:, 0]]))
 BSn_data_dataset2_indices_length8 = BSn_data_dataset2_indices[condition1]
 
 condition2 = np.nonzero(np.array([freq==1 for freq in BSn_data_dataset2_indices_length8[:, -2]]))
@@ -100,7 +100,7 @@ Y_validation_letter = BSn_data_dataset2[validation_indices, 1]
 
 
 # split the data in training and validation
-num_steps_training = 10 
+num_steps_training = 10
 
 X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps_training, X_validation_letter=X_validation_letter, Y_validation_letter=Y_validation_letter)
 
@@ -140,4 +140,4 @@ print('Base model: total number of parameters: {}'.format(model_wide_total_param
 print('Base model: total number of trainable parameters: {}'.format(model_wide_total_trainable_params))
 
 
-train_seq2seq(model_wide, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_wide_validation_original', warmup=35000, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
+train_seq2seq(model_wide, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_wide_validation_validate_6', warmup=35000, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
