@@ -250,6 +250,53 @@ class TransformerDecoder(d2l.AttentionDecoder):
 
 
 
+class TransformerDecoder_classification(d2l.AttentionDecoder):
+	"""Transformer decoder."""
+
+	def __init__(self, vocab_size,  key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, num_layers, dropout, finetune_classes=None, **kwargs):
+		super(TransformerDecoder, self).__init__(**kwargs)
+		self.num_hiddens = num_hiddens
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding(vocab_size, num_hiddens)
+		self.pos_encoding = PositionalEncoding(num_hiddens, dropout)
+		self.blks = nn.Sequential()
+		for i in range(num_layers):
+			self.blks.add_module("block"+str(i), DecoderBlock(key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, dropout, i))
+		self.dense = nn.Linear(num_hiddens, vocab_size)
+		self.dense_finetune = nn.Linear(num_hiddens, finetune_classes)
+
+	def init_state(self, enc_outputs, enc_valid_lens, *args):
+		self.seqX = None
+		return [enc_outputs, enc_valid_lens]
+
+	def forward(self, X, state):
+
+		if not self.training:
+			if self.seqX is None:
+				self.seqX = X
+			else:
+				self.seqX = torch.cat((self.seqX, X), dim=1)
+			X = self.seqX
+
+		X = self.pos_encoding(self.embedding(X) * math.sqrt(self.num_hiddens))
+		self._attention_weights = [[None] * len(self.blks) for _ in range(2)] 
+		
+		for i, blk in enumerate(self.blks):
+
+			X, state = blk(X, state)
+			self._attention_weights[0][i] = blk.attention1.attention.attention_weights
+			self._attention_weights[1][i] = blk.attention2.attention.attention_weights
+		
+		if not self.training:
+			return self.dense(X)[:, -1:, :], state, self.dense_finetune(X)[:, -1:, :]
+		
+		return self.dense(X), state, self.dense_finetune(X)
+
+	def attention_weights(self):
+		return self._attention_weights
+
+
+
 class EncoderDecoder(nn.Module):
     """The base class for the encoder-decoder architecture."""
     def __init__(self, encoder, decoder, **kwargs):
