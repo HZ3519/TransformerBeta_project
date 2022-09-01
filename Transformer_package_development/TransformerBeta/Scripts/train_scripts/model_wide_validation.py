@@ -136,8 +136,8 @@ model_wide = EncoderDecoder(encoder_base, decoder_base)
 model_wide_total_params = sum(p.numel() for p in model_wide.parameters())
 model_wide_total_trainable_params = sum(p.numel() for p in model_wide.parameters() if p.requires_grad)
 
-print('Base model: total number of parameters: {}'.format(model_wide_total_params))
-print('Base model: total number of trainable parameters: {}'.format(model_wide_total_trainable_params))
+print('Wide model: total number of parameters: {}'.format(model_wide_total_params))
+print('Wide model: total number of trainable parameters: {}'.format(model_wide_total_trainable_params))
 
 
 train_seq2seq(model_wide, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, model_name='model_wide_validation', warmup=35000, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)

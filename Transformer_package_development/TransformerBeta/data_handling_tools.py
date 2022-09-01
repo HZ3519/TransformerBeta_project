@@ -1,3 +1,5 @@
+import numpy as np
+
 def search_target(seq_list, seq):
 	"""Search whether one target are in the dataset or not."""
 
