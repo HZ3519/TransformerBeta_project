@@ -207,11 +207,14 @@ class DecoderBlock(nn.Module):
 class TransformerDecoder(d2l.AttentionDecoder):
 	"""Transformer decoder."""
 
-	def __init__(self, vocab_size,  key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, num_layers, dropout, **kwargs):
+	def __init__(self, vocab_size,  key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, num_layers, dropout, shared_embedding=None, **kwargs):
 		super(TransformerDecoder, self).__init__(**kwargs)
 		self.num_hiddens = num_hiddens
 		self.num_layers = num_layers
-		self.embedding = nn.Embedding(vocab_size, num_hiddens)
+		if shared_embedding is not None:
+			self.embedding = shared_embedding
+		else:
+			self.embedding = nn.Embedding(vocab_size, num_hiddens)
 		self.pos_encoding = PositionalEncoding(num_hiddens, dropout)
 		self.blks = nn.Sequential()
 		for i in range(num_layers):
@@ -253,11 +256,14 @@ class TransformerDecoder(d2l.AttentionDecoder):
 class TransformerDecoder_classification(d2l.AttentionDecoder):
 	"""Transformer decoder."""
 
-	def __init__(self, vocab_size,  key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, num_layers, dropout, finetune_classes=None, **kwargs):
+	def __init__(self, vocab_size,  key_size, query_size, value_size, num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens, num_heads, num_layers, dropout, shared_embedding=None, finetune_classes=None, **kwargs):
 		super(TransformerDecoder, self).__init__(**kwargs)
 		self.num_hiddens = num_hiddens
 		self.num_layers = num_layers
-		self.embedding = nn.Embedding(vocab_size, num_hiddens)
+		if shared_embedding is not None:
+			self.embedding = shared_embedding
+		else:
+			self.embedding = nn.Embedding(vocab_size, num_hiddens)
 		self.pos_encoding = PositionalEncoding(num_hiddens, dropout)
 		self.blks = nn.Sequential()
 		for i in range(num_layers):
