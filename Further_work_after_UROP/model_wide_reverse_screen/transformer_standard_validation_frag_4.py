@@ -1,0 +1,220 @@
+import pickle
+import numpy as np
+import torch
+from d2l import torch as d2l
+
+from TransformerBeta import *
+
+"""---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
+"""Data preprocessing"""
+
+amino_dict = {
+		'<bos>': 0, 
+		'<eos>': 1, 
+		'<pad>': 2, 
+		'<unk>': 3,
+		'A': 4,
+		'C': 5,
+		'D': 6, 
+		'E': 7,
+		'F': 8, 
+		'G': 9, 
+		'H': 10,
+		'I': 11, 
+		'K': 12, 
+		'L': 13, 
+		'M': 14, 
+		'N': 15, 
+		'P': 16, 
+		'Q': 17, 
+		'R': 18, 
+		'S': 19, 
+		'T': 20, 
+		'V': 21, 
+		'W': 22, 
+		'Y': 23 
+		}
+
+data_list_antiparallel= []
+data_list_parallel= []
+
+for i in range(1, 9):
+	with open('BSn_libraries/BSn_libraries_copy/anti_frag_dic_{}.pkl'.format(i), 'rb') as f:
+		data = pickle.load(f, encoding='latin1')
+		data_list_antiparallel.append(data)
+
+	with open('BSn_libraries/BSn_libraries_copy/para_frag_dic_{}.pkl'.format(i), 'rb') as f:
+		data = pickle.load(f, encoding='latin1')
+		data_list_parallel.append(data)
+
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti, freq
+BSn_data = []
+least_length = 3
+
+for frag_i_data in data_list_parallel[least_length-1:]:
+	for keys in frag_i_data.keys():
+
+		length = len(keys)
+		freq = len(frag_i_data[keys])
+		for element in frag_i_data[keys]:
+
+			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 0, freq]
+			BSn_data.append(list_i)
+
+for frag_i_data in data_list_antiparallel[least_length-1:]:
+	for keys in frag_i_data.keys():
+
+		length = len(keys)
+		freq = len(frag_i_data[keys])
+		for element in frag_i_data[keys]:
+
+			working_score = length**2 * element.count_score - 0.01 * length * element.promiscuity_score
+			list_i = [keys, element.complementary_sequence, element.count_score, element.promiscuity_score, length, working_score, element.hb_pattern, 1, freq]
+			BSn_data.append(list_i)
+
+# target, complementary_seq, counts, promiscuity, length, working_score, hb_pattern, para/anti, freq
+
+BSn_data_dataset_sequence = np.array(BSn_data, dtype=object)
+BSn_data_dataset1 = np.array(BSn_data_dataset_sequence[BSn_data_dataset_sequence[:, 5] >= 0])
+BSn_data_dataset2 = np.array(BSn_data_dataset_sequence[BSn_data_dataset_sequence[:, 5] >= 0])
+
+
+target_indices = np.arange(BSn_data_dataset2.shape[0]).reshape(-1, 1)
+BSn_data_dataset2_indices = np.hstack([BSn_data_dataset2, target_indices])
+
+condition1 = np.nonzero(np.array([len(sequence)==8 for sequence in BSn_data_dataset2_indices[:, 0]]))
+BSn_data_dataset2_indices_length8 = BSn_data_dataset2_indices[condition1]
+
+condition2 = np.nonzero(np.array([freq==1 for freq in BSn_data_dataset2_indices_length8[:, -2]]))
+BSn_data_dataset2_indices_length8_unique = BSn_data_dataset2_indices_length8[condition2]
+
+# set seed
+np.random.seed(0)
+validation_indices = np.random.choice(BSn_data_dataset2_indices_length8_unique[:, -1], size=5000, replace=False).astype(np.int32)
+
+X_train_letter = np.delete(BSn_data_dataset2[:, 0], validation_indices, axis=0)
+Y_train_letter = np.delete(BSn_data_dataset2[:, 1], validation_indices, axis=0)
+X_validation_letter = BSn_data_dataset2[validation_indices, 0]
+Y_validation_letter = BSn_data_dataset2[validation_indices, 1]
+
+# reverse screen
+# please specify:
+window_size_list = [3, 4, 5, 6, 7] # fragments length for reversing screening in training 
+length = 4  # fragment length above to use for training 
+
+target_indices = np.arange(BSn_data_dataset2.shape[0]).reshape(-1, 1)
+BSn_data_dataset2_indices = np.hstack([BSn_data_dataset2, target_indices])
+
+condition1 = np.nonzero(np.array([length==8 for length in BSn_data_dataset2_indices[:, 4]]))
+BSn_data_dataset2_indices_length8 = BSn_data_dataset2_indices[condition1]
+
+condition2 = np.nonzero(np.array([freq==1 for freq in BSn_data_dataset2_indices_length8[:, -2]]))
+BSn_data_dataset2_indices_length8_unique = BSn_data_dataset2_indices_length8[condition2]
+
+# set seed
+np.random.seed(0)
+validation_indices = np.random.choice(BSn_data_dataset2_indices_length8_unique[:, -1], size=5000, replace=False).astype(np.int32)
+
+X_train_letter = np.delete(BSn_data_dataset2[:, 0], validation_indices, axis=0)
+Y_train_letter = np.delete(BSn_data_dataset2[:, 1], validation_indices, axis=0)
+X_validation_letter = BSn_data_dataset2[validation_indices, 0]
+Y_validation_letter = BSn_data_dataset2[validation_indices, 1]
+
+sequence_remove_list = []
+X_train_letter_screening_sum= 0 
+
+for window_size in window_size_list:
+
+	condition3 = np.nonzero(np.array([len(sequence)==window_size for sequence in X_train_letter]))
+	X_train_letter_length_i = X_train_letter[condition3]
+	X_train_letter_screening_sum += X_train_letter_length_i.shape[0]
+	print("number of length {} samples for screening: {}".format(window_size, X_train_letter_length_i.shape))
+	screen_sequence_to_remove = screen(X_validation_letter, X_train_letter_length_i, window_size, return_screen_sequence=True)
+	sequence_remove_list.extend(screen_sequence_to_remove)
+
+sequence_remove_dict = {}
+for sequence in sequence_remove_list:
+	sequence_remove_dict[sequence] = 1
+
+condition_list = []
+for sequence in X_train_letter:
+	try:
+		sequence_remove_dict[sequence]
+		condition_list.append(False)
+	except:
+		condition_list.append(True)
+
+X_train_letter = X_train_letter[np.array(condition_list)]
+Y_train_letter = Y_train_letter[np.array(condition_list)]
+
+condition3 = np.nonzero(np.array([len(sequence)>=length for sequence in X_train_letter]))
+X_train_letter = X_train_letter[condition3]
+Y_train_letter = Y_train_letter[condition3]
+
+print("------------validation set info---------")
+print("number of length 8 samples: ", BSn_data_dataset2_indices_length8.shape)
+print("number of unique length 8 sample: ", BSn_data_dataset2_indices_length8_unique.shape)
+print("number of validation samples: ", X_validation_letter.shape)
+print("------------training set info---------")
+print("number of all training samples going though reverse screening", X_train_letter_screening_sum)
+print("number of removed traininng sequences: ", len(sequence_remove_list))
+print("number of all training samples after reverse screening: ", len(X_train_letter))
+print("Above may not be consistent if screen and length used is not the same")
+print("------------ data below---------")
+print(X_train_letter.shape)
+print(Y_train_letter.shape)
+print(X_validation_letter.shape)
+print(Y_validation_letter.shape)
+
+# split the data in training and validation
+num_steps_training = 10 
+
+X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps_training, X_validation_letter=X_validation_letter, Y_validation_letter=Y_validation_letter)
+
+working_score_tensor = torch.tensor(list(np.delete(BSn_data_dataset2[:, 5], validation_indices, axis=0)))
+
+
+
+
+
+
+"""---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
+""""Model Training"""
+# please specify:
+# 1. training_steps: 100k
+# 2. model_name:
+
+model_name = 'transformer_standard_validation_frag_4'
+
+query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
+num_layers, dropout = 6, 0.1
+lr, training_steps, batch_size, label_smoothing = 0.0004, 100000, 4096, 0.1
+ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
+
+norm_shape = [512] # 512 corresponds to the dim of such number to normalize
+device = d2l.try_gpu()
+
+encoder_standard = TransformerEncoder(
+	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
+	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
+	num_layers, dropout)
+decoder_standard = TransformerDecoder(
+	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
+	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
+	num_layers, dropout, shared_embedding=encoder_standard.embedding)
+model_standard = EncoderDecoder(encoder_standard, decoder_standard)
+
+
+model_standard_total_params = sum(p.numel() for p in model_standard.parameters())
+model_standard_total_trainable_params = sum(p.numel() for p in model_standard.parameters() if p.requires_grad)
+
+print('Standard model: total number of parameters: {}'.format(model_standard_total_params))
+print('Standard model: total number of trainable parameters: {}'.format(model_standard_total_trainable_params))
+
+
+optimizer = torch.optim.Adam(model_standard.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+warmup = 4000
+scheduler = WarmupCosineSchedule(optimizer, warmup, t_total=training_steps)
+
+train_seq2seq_training_steps(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)

@@ -6,6 +6,29 @@ from TransformerBeta.model_metric import hamming_distance_training
 import time 
 import matplotlib.pyplot as plt 
 import numpy as np
+from torch.optim.lr_scheduler import LambdaLR
+import math
+
+
+
+class WarmupCosineSchedule(LambdaLR):
+    """ Linear warmup and then cosine decay.
+        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
+        Decreases learning rate from 1. to 0. over remaining `t_total - warmup_steps` steps following a cosine curve.
+        If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
+    """
+    def __init__(self, optimizer, warmup_steps, t_total, cycles=.5, last_epoch=-1):
+        self.warmup_steps = warmup_steps
+        self.t_total = t_total
+        self.cycles = cycles
+        super(WarmupCosineSchedule, self).__init__(optimizer, self.lr_lambda, last_epoch=last_epoch)
+
+    def lr_lambda(self, step):
+        if step < self.warmup_steps:
+            return float(step) / float(max(1.0, self.warmup_steps))
+        # progress after warmup
+        progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
+        return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
 
 
 
@@ -62,7 +85,7 @@ def preprocess_train(X_train_letter, Y_train_letter, amino_dict, num_steps, X_va
 
 	
 
-def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
+def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, num_epochs, batch_size, label_smoothing, amino_dict, device, optimizer=None, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
 	"""Train a model for sequence to sequence."""
 
 	def init_weights(module):
@@ -73,8 +96,14 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 
 	net.apply(init_weights)
 	net.to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	if optimizer is None:
+		optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+	else:
+		optimizer = optimizer
+	if isinstance(warmup, int):
+		scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	else:
+		scheduler = warmup
 	loss = MaskedSoftmaxCELoss()
 	net.train()
 
@@ -216,7 +245,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 
 
 
-def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, training_steps, batch_size, label_smoothing, amino_dict, device, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
+def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weights, lr, training_steps, batch_size, label_smoothing, amino_dict, device, optimizer=None, warmup=1, model_name = 'model_demo', X_validation=None, X_validation_valid_len=None, Y_validation=None, Y_validation_valid_len=None):
 	"""Train a model for sequence to sequence."""
 
 	def init_weights(module):
@@ -227,8 +256,14 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 
 	net.apply(init_weights)
 	net.to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	if optimizer is None:
+		optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+	else:
+		optimizer = optimizer
+	if isinstance(warmup, int):
+		scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=warmup, start_factor=1/warmup)
+	else:
+		scheduler = warmup
 	loss = MaskedSoftmaxCELoss()
 	net.train()
 
