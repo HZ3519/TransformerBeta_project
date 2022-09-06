@@ -111,6 +111,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	training_loss = []
 	validation_score_hamming = []
 	validation_score_sequence_accuracy = []
+	validation_score_average_log_prob = []
 
 
 	for epoch in range(num_epochs):
@@ -195,6 +196,21 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("epoch {}, sequence accuracy: {}".format(epoch+1,sequence_accuracy))
 
+				for i in range(Y_validation.shape[1]-1):
+		
+					Y_raw, dec_state = net.decoder(dec_X, dec_state)
+					Y = softmax_layer(Y_raw)
+					dec_X = Y_validation[:, i].reshape(-1,1)
+					index = dec_X.type(torch.int64)
+					prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
+					prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
+					prob = torch.mul(prob, prob_i)
+				
+				average_log_prob = torch.log(prob).mean()
+				validation_score_average_log_prob.append(average_log_prob.cpu().numpy().item())
+				print("epoch {}, average log prob: {}".format(epoch+1,average_log_prob))
+
+
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
 	# save training loss plot
@@ -233,6 +249,17 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		plt.legend()
 		plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
 
+		# save validation average log prob plot
+		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+		x = list(range(1, num_epochs+1))
+		plt.plot(x,validation_score_average_log_prob,label="average_log_prob")
+		plt.xlabel('Epochs')
+		plt.ylabel('Average log prob')
+		plt.title("transformer <{}> validation average log prob".format(model_name))
+		plt.grid()
+		plt.legend()
+		plt.savefig('{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
+
 	# save model weights
 	file_name = model_name + '_' + file_time
 	torch.save(net.state_dict(), file_name)
@@ -242,6 +269,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	if X_validation is not None:
 		np.savetxt('{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
 		np.savetxt('{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+		np.savetxt('{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
 
 
 
@@ -271,6 +299,7 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 	training_loss = []
 	validation_score_hamming = []
 	validation_score_sequence_accuracy = []
+	validation_score_average_log_prob = []
 
 	# here we modify the training steps to be the number of epochs
 	current_step = 0
@@ -360,7 +389,23 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 				sequence_accuracy = sum(sequence_accuracy_list) / Y_true.shape[0]
 				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy))
+
+				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
+				prob = torch.tensor([1] * Y_validation.shape[0], device=device).reshape(-1, 1)
+
+				for i in range(Y_validation.shape[1]-1):
+		
+					Y_raw, dec_state = net.decoder(dec_X, dec_state)
+					Y = softmax_layer(Y_raw)
+					dec_X = Y_validation[:, i].reshape(-1,1)
+					index = dec_X.type(torch.int64)
+					prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
+					prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
+					prob = torch.mul(prob, prob_i)
 				
+				average_log_prob = torch.log(prob).mean()
+				validation_score_average_log_prob.append(average_log_prob.cpu().numpy().item())
+				print("training step {}, average log prob: {}".format(current_step,average_log_prob))
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
@@ -396,6 +441,16 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 		plt.grid()
 		plt.legend()
 		plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
+
+		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+		x = np.array(training_steps_count)
+		plt.plot(x,validation_score_average_log_prob,label="average_log_prob")
+		plt.xlabel('Training steps')
+		plt.ylabel('Average log prob')
+		plt.title("transformer <{}> validation average log prob".format(model_name))
+		plt.grid()
+		plt.legend()
+		plt.savefig('{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
 	
 
 	file_name = model_name + '_' + file_time
@@ -405,3 +460,4 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 	if X_validation is not None:
 		np.savetxt('{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
 		np.savetxt('{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+		np.savetxt('{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
