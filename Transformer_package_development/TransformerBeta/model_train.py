@@ -196,6 +196,11 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("epoch {}, sequence accuracy: {}".format(epoch+1,sequence_accuracy))
 
+				enc_outputs = net.encoder(X_validation, X_validation_valid_len)
+				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
+				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
+				prob = torch.tensor([1] * Y_validation.shape[0], device=device).reshape(-1, 1)
+				
 				for i in range(Y_validation.shape[1]-1):
 		
 					Y_raw, dec_state = net.decoder(dec_X, dec_state)
@@ -390,6 +395,8 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy))
 
+				enc_outputs = net.encoder(X_validation, X_validation_valid_len)
+				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
 				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
 				prob = torch.tensor([1] * Y_validation.shape[0], device=device).reshape(-1, 1)
 
