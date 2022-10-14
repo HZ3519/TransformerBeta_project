@@ -72,21 +72,22 @@ def compute_MSA_weights_hamming(MSA, threshold = 0.1, verbose=False):
 	A neighbour of a sequence is another sequence within a given
 	threshold of Hamming distance (given as a fraction of the total
 	sequence length).
-	Input is a numba Typed List of strings.
 	"""
 
-	B = MSA.shape[0]
+	B = len(MSA)
 	num_neighbours = np.zeros(B)
 	for a in range(0, B):
 		num_neighbours[a] += 1
 		t = MSA[a]
 		if (a % 10000 == 0) and verbose:
 			print(a)
+		num_neighbours_a_count = 0
 		for b in numba.prange(a + 1, B):
 			dist = hamming_distance(t, MSA[b])/len(t)
 			if dist < threshold:
-				num_neighbours[a] += 1
+				num_neighbours_a_count += 1
 				num_neighbours[b] += 1
+		num_neighbours[a] += num_neighbours_a_count # avoid race condition
 	return 1.0/num_neighbours
 
 
@@ -98,20 +99,22 @@ def compute_MSA_weights_Levenshtein(MSA, threshold = 0.1, verbose=False):
 	number of neighbouring sequences.
 	A neighbour of a sequence is another sequence within a given
 	threshold of Levenshtein distance (given as a fraction of the total
-	sequence length).
-	Input is a numba Typed List of strings.
+	sequence length).MSA string sequences do not need to be converted into
+	number sequences before passing it to compute_MSA_weights.
 	"""
 
-	B = MSA.shape[0]
+	B = len(MSA)
 	num_neighbours = np.zeros(B)
 	for a in range(0, B):
 		num_neighbours[a] += 1
 		t = MSA[a]
 		if (a % 10000 == 0) and verbose:
 			print(a)
+		num_neighbours_a_count = 0
 		for b in numba.prange(a + 1, B):
 			dist = levenshtein_distance(t, MSA[b])/max(len(t), len(MSA[b]))
 			if dist < threshold:
-				num_neighbours[a] += 1
+				num_neighbours_a_count += 1
 				num_neighbours[b] += 1
+		num_neighbours[a] += num_neighbours_a_count # avoid race condition
 	return 1.0/num_neighbours

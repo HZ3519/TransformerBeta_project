@@ -155,6 +155,9 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		animator.add(epoch + 1, (metric[0] / metric[1],))
 		training_loss.append(metric[0] / metric[1])
 		print("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]))
+		# save the print message to a a txt file in model name folder
+		with open(model_name + '/print_message.txt', 'a') as f:
+			f.write("epoch {}, loss: {}".format(epoch+1, metric[0] / metric[1]) + '\n')
 
 		if X_validation is not None:
 			net.eval()
@@ -190,11 +193,17 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				hamming_scores = hamming_distance_training(Y_pred, Y_true)
 				validation_score_hamming.append(hamming_scores.cpu().numpy().item())
 				print("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores))
+				# save the print message to a a txt file in model name folder
+				with open(model_name + '/print_message.txt', 'a') as f:
+					f.write("epoch {}, hamming distance: {}".format(epoch+1,hamming_scores) + '\n')
 
 				sequence_accuracy_list = [torch.equal(a, b) for a, b in zip(Y_pred, Y_true)]
 				sequence_accuracy = sum(sequence_accuracy_list) / Y_true.shape[0]
 				validation_score_sequence_accuracy.append(sequence_accuracy)
 				print("epoch {}, sequence accuracy: {}".format(epoch+1,sequence_accuracy))
+				# save the print message to a a txt file in model name folder
+				with open(model_name + '/print_message.txt', 'a') as f:
+					f.write("epoch {}, sequence accuracy: {}".format(epoch+1,sequence_accuracy) + '\n')
 
 				enc_outputs = net.encoder(X_validation, X_validation_valid_len)
 				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
@@ -214,6 +223,9 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 				average_log_prob = torch.log(prob).mean()
 				validation_score_average_log_prob.append(average_log_prob.cpu().numpy().item())
 				print("epoch {}, average log prob: {}".format(epoch+1,average_log_prob))
+				# save the print message to a a txt file in model name folder
+				with open(model_name + '/print_message.txt', 'a') as f:
+					f.write("epoch {}, average log prob: {}".format(epoch+1,average_log_prob) + '\n')
 
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
@@ -229,7 +241,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 	plt.title("transformer <{}> training loss".format(model_name))
 	plt.grid()
 	plt.legend()
-	plt.savefig('{}_lossplot_{}.png'.format(model_name, file_time))
+	plt.savefig(model_name + '/{}_lossplot_{}.png'.format(model_name, file_time))
 
 	if X_validation is not None:
 		# save validation hamming metic plot
@@ -241,7 +253,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		plt.title("transformer <{}> validation hamming scores".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_hamming_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_hamming_{}.png'.format(model_name, file_time))
 		
 		# save validation sequence accuracy plot
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
@@ -252,7 +264,7 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		plt.title("transformer <{}> validation sequence accuracy".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
 
 		# save validation average log prob plot
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
@@ -263,18 +275,18 @@ def train_seq2seq(net, X_train, X_valid_len, Y_train, Y_valid_len, sample_weight
 		plt.title("transformer <{}> validation average log prob".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
 
 	# save model weights
 	file_name = model_name + '_' + file_time
-	torch.save(net.state_dict(), file_name)
+	torch.save(net.state_dict(), model_name + '/' + file_name)
 
 	# save training_loss, validation_score_hamming, validation_score_sequence_accuracy
-	np.savetxt('{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
+	np.savetxt(model_name + '/{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
 	if X_validation is not None:
-		np.savetxt('{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
-		np.savetxt('{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
-		np.savetxt('{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
 
 
 
@@ -311,7 +323,7 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 	training_steps_count = []
 	
 	while current_step < training_steps:
-	
+
 		net.train()
 
 		timer = d2l.Timer()
@@ -347,72 +359,91 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 			scheduler.step()
 			with torch.no_grad():
 				metric.add(l*num_tokens, num_tokens) 
+
+			if current_step % 500 == 0:
+
+				animator.add(current_step, (metric[0] / metric[1],))
+				training_loss.append(metric[0] / metric[1])
+				training_steps_count.append(current_step)
+				print("training step {}, loss: {}".format(current_step, metric[0] / metric[1]))
+				# save the print message to a a txt file in model name folder
+				with open(model_name + '/print_message.txt', 'a') as f:
+					f.write("training step {}, loss: {}".format(current_step, metric[0] / metric[1]) + '\n')
+
+				metric = d2l.Accumulator(2)  
+
+				if X_validation is not None:
+					net.eval()
+
+					with torch.no_grad():
+
+						softmax_layer = nn.Softmax(dim=2)
+						X_validation = X_validation.to(device)
+						X_validation_valid_len = X_validation_valid_len.to(device)
+						Y_validation = Y_validation.to(device)
+						Y_validation_valid_len = Y_validation_valid_len.to(device)
+
+						bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0],
+											device=device).reshape(-1, 1)
+						Y_true = torch.cat([bos, Y_validation[:, :-1]], 1)
+						Y_true = Y_true.type(torch.int32)
+
+						enc_outputs = net.encoder(X_validation, X_validation_valid_len)
+						dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
+
+						dec_X = torch.tensor([amino_dict['<bos>']] * X_validation.shape[0],
+											device=device).reshape(-1, 1)
+
+						for i in range(Y_validation.shape[1]-1):
+
+								Y_raw, dec_state = net.decoder(dec_X, dec_state)
+								Y = softmax_layer(Y_raw)
+
+								dec_X = Y.argmax(dim=2)
+								Y_pred = dec_X.type(torch.int32)
+
+						Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+						
+						hamming_scores = hamming_distance_training(Y_pred, Y_true)
+						validation_score_hamming.append(hamming_scores.cpu().numpy().item())
+						print("training step {}, hamming distance: {}".format(current_step,hamming_scores))
+						# save the print message to a a txt file in model name folder
+						with open(model_name + '/print_message.txt', 'a') as f:
+							f.write("training step {}, hamming distance: {}".format(current_step,hamming_scores) + '\n')
+
+						sequence_accuracy_list = [torch.equal(a, b) for a, b in zip(Y_pred, Y_true)]
+						sequence_accuracy = sum(sequence_accuracy_list) / Y_true.shape[0]
+						validation_score_sequence_accuracy.append(sequence_accuracy)
+						print("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy))
+						# save the print message to a a txt file in model name folder
+						with open(model_name + '/print_message.txt', 'a') as f:
+							f.write("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy) + '\n')
+
+						enc_outputs = net.encoder(X_validation, X_validation_valid_len)
+						dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
+						bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
+						prob = torch.tensor([1] * Y_validation.shape[0], device=device).reshape(-1, 1)
+
+						for i in range(Y_validation.shape[1]-1):
+				
+							Y_raw, dec_state = net.decoder(dec_X, dec_state)
+							Y = softmax_layer(Y_raw)
+							dec_X = Y_validation[:, i].reshape(-1,1)
+							index = dec_X.type(torch.int64)
+							prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
+							prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
+							prob = torch.mul(prob, prob_i)
+						
+						average_log_prob = torch.log(prob).mean()
+						validation_score_average_log_prob.append(average_log_prob.cpu().numpy().item())
+						print("training step {}, average log prob: {}".format(current_step,average_log_prob))
+						# save the print message to a a txt file in model name folder
+						with open(model_name + '/print_message.txt', 'a') as f:
+							f.write("training step {}, average log prob: {}".format(current_step,average_log_prob) + '\n')
+						
+					
+					net.train()
 			current_step += 1
-
-		animator.add(current_step, (metric[0] / metric[1],))
-		training_loss.append(metric[0] / metric[1])
-		training_steps_count.append(current_step)
-		print("training step {}, loss: {}".format(current_step, metric[0] / metric[1]))
-
-		if X_validation is not None:
-			net.eval()
-
-			with torch.no_grad():
-
-				softmax_layer = nn.Softmax(dim=2)
-				X_validation = X_validation.to(device)
-				X_validation_valid_len = X_validation_valid_len.to(device)
-				Y_validation = Y_validation.to(device)
-				Y_validation_valid_len = Y_validation_valid_len.to(device)
-
-				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0],
-									device=device).reshape(-1, 1)
-				Y_true = torch.cat([bos, Y_validation[:, :-1]], 1)
-				Y_true = Y_true.type(torch.int32)
-
-				enc_outputs = net.encoder(X_validation, X_validation_valid_len)
-				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
-
-				dec_X = torch.tensor([amino_dict['<bos>']] * X_validation.shape[0],
-									device=device).reshape(-1, 1)
-
-				for i in range(Y_validation.shape[1]-1):
-
-						Y_raw, dec_state = net.decoder(dec_X, dec_state)
-						Y = softmax_layer(Y_raw)
-
-						dec_X = Y.argmax(dim=2)
-						Y_pred = dec_X.type(torch.int32)
-
-				Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
-				
-				hamming_scores = hamming_distance_training(Y_pred, Y_true)
-				validation_score_hamming.append(hamming_scores.cpu().numpy().item())
-				print("training step {}, hamming distance: {}".format(current_step,hamming_scores))
-
-				sequence_accuracy_list = [torch.equal(a, b) for a, b in zip(Y_pred, Y_true)]
-				sequence_accuracy = sum(sequence_accuracy_list) / Y_true.shape[0]
-				validation_score_sequence_accuracy.append(sequence_accuracy)
-				print("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy))
-
-				enc_outputs = net.encoder(X_validation, X_validation_valid_len)
-				dec_state = net.decoder.init_state(enc_outputs, X_validation_valid_len)
-				bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
-				prob = torch.tensor([1] * Y_validation.shape[0], device=device).reshape(-1, 1)
-
-				for i in range(Y_validation.shape[1]-1):
-		
-					Y_raw, dec_state = net.decoder(dec_X, dec_state)
-					Y = softmax_layer(Y_raw)
-					dec_X = Y_validation[:, i].reshape(-1,1)
-					index = dec_X.type(torch.int64)
-					prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
-					prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
-					prob = torch.mul(prob, prob_i)
-				
-				average_log_prob = torch.log(prob).mean()
-				validation_score_average_log_prob.append(average_log_prob.cpu().numpy().item())
-				print("training step {}, average log prob: {}".format(current_step,average_log_prob))
 
 	print(f'loss {metric[0] / metric[1]:.3f}, {metric[1] / timer.stop():.1f} tokens/sec on {str(device)}')
 
@@ -425,7 +456,7 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 	plt.title("transformer <{}> training loss".format(model_name))
 	plt.grid()
 	plt.legend()
-	plt.savefig('{}_lossplot_{}.png'.format(model_name, file_time))
+	plt.savefig(model_name + '/{}_lossplot_{}.png'.format(model_name, file_time))
 
 	if X_validation is not None:
 
@@ -437,7 +468,7 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 		plt.title("transformer <{}> validation hamming scores".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_hamming_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_hamming_{}.png'.format(model_name, file_time))
 
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
 		x = np.array(training_steps_count)
@@ -447,7 +478,7 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 		plt.title("transformer <{}> validation sequence accuracy".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
 
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
 		x = np.array(training_steps_count)
@@ -457,14 +488,14 @@ def train_seq2seq_training_steps(net, X_train, X_valid_len, Y_train, Y_valid_len
 		plt.title("transformer <{}> validation average log prob".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig('{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
 	
 
 	file_name = model_name + '_' + file_time
-	torch.save(net.state_dict(), file_name)
+	torch.save(net.state_dict(), model_name + '/' + file_name)
 	
-	np.savetxt('{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
+	np.savetxt(model_name + '/{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
 	if X_validation is not None:
-		np.savetxt('{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
-		np.savetxt('{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
-		np.savetxt('{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')

@@ -109,15 +109,26 @@ Y_train_letter = Y_train_letter[condition3]
 """---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
 """Similarity weight histogram"""
 import numba
+# please spefify:
+numba.set_num_threads(48)
+threshold = 0.1
+
 # compute Levenshtein distance
 train_letter = [i+j for i, j in zip(X_train_letter, Y_train_letter)]
 train_letter = numba.typed.List(train_letter)
-MSA_weights_Levenshtein = compute_MSA_weights_Levenshtein(train_letter, 0.1)
+MSA_weights_Levenshtein = compute_MSA_weights_Levenshtein(train_letter, threshold)
 
 file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
 
 # save MSA weights
 # save MSA weights histogram
-plt.hist(MSA_weights_Levenshtein, bins=10)
-plt.savefig('MSA_weights_Levenshtein.png')
-np.savetxt('MSA_weights_Levenshtein_{}.csv'.format(file_time), MSA_weights_Levenshtein, delimiter=',', fmt='%s')
+plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+plt.rcParams.update({'font.size': 15})
+plt.hist(MSA_weights_Levenshtein, bins=100, range=(0, 1), color='blue', edgecolor='black', linewidth=1.2)
+plt.xlabel('MSA weights')
+plt.ylabel('Frequency')
+plt.title('MSA weights histogram_{}%Identity'.format((1-threshold)*100))
+plt.grid()
+plt.savefig('MSA_weights_Levenshtein_{}.png'.format(file_time))
+
+np.savetxt('MSA_weights_Levenshtein_{}.csv'.format(file_time), MSA_weights_Levenshtein, delimiter=',', fmt='%s')	
