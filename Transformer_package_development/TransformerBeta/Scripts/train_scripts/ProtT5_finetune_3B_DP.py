@@ -1,14 +1,23 @@
 import pickle
 import numpy as np
 import torch
+import torch.nn as nn
 from d2l import torch as d2l
 import os
+from transformers import T5Tokenizer, T5Model
+import re
+import torch_optimizer as optim
 
 from TransformerBeta import *
+
+# set environment variable set 'PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512'
+# to avoid CUDA out of memory error
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
 
 """---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
 """Data preprocessing"""
 
+tokenizer = T5Tokenizer.from_pretrained('Rostlab/prot_t5_xl_bfd', do_lower_case=False)
 amino_dict = {
 		'<bos>': 0, 
 		'<eos>': 1, 
@@ -35,11 +44,17 @@ amino_dict = {
 		'W': 22, 
 		'Y': 23 
 		}
+#amino_T5_dict = {}
+#for key, value in amino_dict.items():
+#	amino_T5_dict[key] = tokenizer.convert_tokens_to_ids(key)
+#amino_T5_dict['<eos>'] = 1
+#amino_T5_dict['<bos>'] = 1000
+#amino_T5_dict['<unk>'] = 2
 
 # 1. load the stored data
 # length of interest >= 7
 length_of_interest = []
-type_of_interest = ['antiparallel', 'parallel'] # <------------------------------------------------------------------------change 
+type_of_interest = ['antiparallel'] # <------------------------------------------------------------------------change 
 for i in range(7, 8): # <------------------------------------------------------------------------change 
 	length_of_interest.append(str(i))
 # length_of_interest.append('20more') # <------------------------------------------------------------------------change 
@@ -47,11 +62,11 @@ for i in range(7, 8): # <-------------------------------------------------------
 beta_strand_data = {}
 # create subdictionary for antiparallel and parallel
 beta_strand_data['antiparallel'] = {}
-beta_strand_data['parallel'] = {} # <------------------------------------------------------------------------change 
+#beta_strand_data['parallel'] = {} # <------------------------------------------------------------------------change 
 # create subdictionary of subdictionary for each length, string 3-20 and 20more
 for i in range(7, 8): # <-------------------------------------------------------------------------change 
 	beta_strand_data['antiparallel'][str(i)] = {}
-	beta_strand_data['parallel'][str(i)] = {} # <------------------------------------------------------------------------change 
+	#beta_strand_data['parallel'][str(i)] = {} # <------------------------------------------------------------------------change 
 # beta_strand_data['antiparallel']['20more'] = {} # <------------------------------------------------------------------------change 
 # beta_strand_data['parallel']['20more'] = {} # <------------------------------------------------------------------------change 
 
@@ -112,7 +127,7 @@ Y_validation = AF_beta_strand_dataset[validation_indices, 1]
 # split the data in training and validation
 num_steps_training = 9 # <------------------------------------------------------------------------change 
 
-X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train, Y_train, amino_dict, num_steps_training, X_validation_letter=X_validation, Y_validation_letter=Y_validation)
+X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train_T5(X_train, Y_train, amino_dict, num_steps_training, X_validation_letter=X_validation, Y_validation_letter=Y_validation)
 
 working_score_tensor = torch.ones(X_train.shape[0], dtype=torch.float32) # equal weight for all training data
 
@@ -131,7 +146,7 @@ print("Number of validation data: " + str(X_validation.shape[0]))
 # 1. training_steps: 200k
 # 2. model_name:
 
-model_name = 'AF2_transformer_standard_validation'
+model_name = 'ProtT5_finetune_3B_DP'
 if not os.path.exists(model_name):
 	os.makedirs(model_name)
 with open(model_name + '/print_message.txt', 'w') as f:
@@ -139,38 +154,32 @@ with open(model_name + '/print_message.txt', 'w') as f:
 	f.write("Number of unique training data: " + str(len(dataset_indices_unique)) + "\n")
 	f.write("Number of validation data: " + str(X_validation.shape[0]) + "\n")
 
-query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
-num_layers, dropout = 6, 0.1
-lr, training_steps, batch_size, label_smoothing = 0.0004, 200000, 4096, 0.1
-ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
-
-norm_shape = [512] # 512 corresponds to the dim of such number to normalize
+lr, training_steps, batch_size, label_smoothing = 0.0004, 10000, 4, 0.1
 device = d2l.try_gpu()
 
-encoder_standard = TransformerEncoder(
-	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
-	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
-	num_layers, dropout)
-decoder_standard = TransformerDecoder(
-	len(amino_dict), key_size, query_size, value_size, num_hiddens, 
-	norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
-	num_layers, dropout, shared_embedding=encoder_standard.embedding)
-model_standard = EncoderDecoder(encoder_standard, decoder_standard)
+ProtT5 = T5Model.from_pretrained("Rostlab/prot_t5_xl_bfd")
+ProtT5_finetune_model = ProtT5_finetune(len(amino_dict), ProtT5)
 
+ProtT5_finetune_model_total_params = sum(p.numel() for p in ProtT5_finetune_model.parameters())
+ProtT5_finetune_model_total_trainable_params = sum(p.numel() for p in ProtT5_finetune_model.parameters() if p.requires_grad)
 
-model_standard_total_params = sum(p.numel() for p in model_standard.parameters())
-model_standard_total_trainable_params = sum(p.numel() for p in model_standard.parameters() if p.requires_grad)
-
-print('Standard model: total number of parameters: {}'.format(model_standard_total_params))
-print('Standard model: total number of trainable parameters: {}'.format(model_standard_total_trainable_params))
+print('ProtT5_finetune_model: total number of parameters: {}'.format(ProtT5_finetune_model_total_params))
+print('ProtT5_finetune_model: total number of trainable parameters: {}'.format(ProtT5_finetune_model_total_trainable_params))
 
 with open(model_name + '/print_message.txt', 'a') as f:
-	f.write('Standard model: total number of parameters: {}'.format(model_standard_total_params) + "\n")
-	f.write('Standard model: total number of trainable parameters: {}'.format(model_standard_total_trainable_params) + "\n")
+	f.write('ProtT5_finetune_model: total number of parameters: {}'.format(ProtT5_finetune_model_total_params) + "\n")
+	f.write('ProtT5_finetune_model: total number of trainable parameters: {}'.format(ProtT5_finetune_model_total_trainable_params) + "\n")
 
 
-optimizer = torch.optim.Adam(model_standard.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+# optimizer = torch.optim.Adam(ProtT5_finetune_model.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
+optimizer = optim.Adafactor(ProtT5_finetune_model.parameters(), lr=lr)
 warmup = 4000
 scheduler = WarmupCosineSchedule(optimizer, warmup, t_total=training_steps)
 
-train_seq2seq_training_steps(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
+if torch.cuda.device_count() > 1:
+  print("Let's use", torch.cuda.device_count(), "GPUs!")
+  ProtT5_finetune_model = nn.DataParallel(ProtT5_finetune_model)
+  with open(model_name + '/print_message.txt', 'a') as f:
+  	f.write("Let's use " + str(torch.cuda.device_count()) + " GPUs!" + "\n")
+
+train_prott5_DP(ProtT5_finetune_model, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)

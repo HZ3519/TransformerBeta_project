@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import torch
+import torch.nn as nn
 from d2l import torch as d2l
 import os
 
@@ -91,9 +92,13 @@ for type in beta_strand_data:
 			freq = len(beta_strand_data[type][length][key])
 			for comp in beta_strand_data[type][length][key]:
 				AF_beta_strand_dataset.append([key, comp, beta_strand_data[type][length][key][comp], freq])
-dataset_indices = list(range(len(AF_beta_strand_dataset)))
-# convert to numpy array
 AF_beta_strand_dataset = np.array(AF_beta_strand_dataset, dtype=object)
+
+# keep the training data with top 5 million count
+AF_beta_strand_dataset = AF_beta_strand_dataset[AF_beta_strand_dataset[:, 2].argsort()[::-1]]
+AF_beta_strand_dataset = AF_beta_strand_dataset[:2000000, :]
+
+dataset_indices = list(range(len(AF_beta_strand_dataset)))
 dataset_indices = np.array(dataset_indices)
 
 # filter validation indices from the dataset
@@ -117,9 +122,9 @@ X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len
 working_score_tensor = torch.ones(X_train.shape[0], dtype=torch.float32) # equal weight for all training data
 
 # print statistics
-print("Number of training data: " + str(X_train.shape[0]))
-print("Number of unique training data: ", len(dataset_indices_unique))
-print("Number of validation data: " + str(X_validation.shape[0]))
+print("Number of training data (after filtering top 2M): " + str(X_train.shape[0]))
+print("Number of unique training data (after filtering top 2M): ", len(dataset_indices_unique))
+print("Number of validation data (after filtering top 2M): " + str(X_validation.shape[0]))
 
 
 
@@ -128,20 +133,21 @@ print("Number of validation data: " + str(X_validation.shape[0]))
 """---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
 """"Model Training"""
 # please specify:
-# 1. training_steps: 200k
+# 1. training_steps: 300k
 # 2. model_name:
+# 3. warmup_steps: 8k
 
-model_name = 'AF2_transformer_standard_validation'
+model_name = 'AF2_transformer_standard_validation_58M_DP_2Mdata'
 if not os.path.exists(model_name):
 	os.makedirs(model_name)
 with open(model_name + '/print_message.txt', 'w') as f:
-	f.write("Number of training data: " + str(X_train.shape[0]) + "\n")
-	f.write("Number of unique training data: " + str(len(dataset_indices_unique)) + "\n")
-	f.write("Number of validation data: " + str(X_validation.shape[0]) + "\n")
+	f.write("Number of training data (after filtering top 2M): " + str(X_train.shape[0]) + "\n")
+	f.write("Number of unique training data (after filtering top 2M): " + str(len(dataset_indices_unique)) + "\n")
+	f.write("Number of validation data (after filtering top 2M): " + str(X_validation.shape[0]) + "\n")
 
 query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
-num_layers, dropout = 6, 0.1
-lr, training_steps, batch_size, label_smoothing = 0.0004, 200000, 4096, 0.1
+num_layers, dropout = 8, 0.1
+lr, training_steps, batch_size, label_smoothing = 0.0004, 300000, 4096, 0.1
 ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
 
 norm_shape = [512] # 512 corresponds to the dim of such number to normalize
@@ -170,7 +176,13 @@ with open(model_name + '/print_message.txt', 'a') as f:
 
 
 optimizer = torch.optim.Adam(model_standard.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-warmup = 4000
+warmup = 8000
 scheduler = WarmupCosineSchedule(optimizer, warmup, t_total=training_steps)
 
-train_seq2seq_training_steps(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
+if torch.cuda.device_count() > 1:
+  print("Let's use", torch.cuda.device_count(), "GPUs!")
+  model_standard = nn.DataParallel(model_standard)
+  with open(model_name + '/print_message.txt', 'a') as f:
+  	f.write("Let's use " + str(torch.cuda.device_count()) + " GPUs!" + "\n")
+
+train_seq2seq_training_steps_DP(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)

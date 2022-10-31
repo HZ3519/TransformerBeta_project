@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import torch
+import torch.nn as nn
 from d2l import torch as d2l
 import os
 
@@ -131,7 +132,7 @@ print("Number of validation data: " + str(X_validation.shape[0]))
 # 1. training_steps: 200k
 # 2. model_name:
 
-model_name = 'AF2_transformer_standard_validation'
+model_name = 'AF2_transformer_standard_validation_58M_DP'
 if not os.path.exists(model_name):
 	os.makedirs(model_name)
 with open(model_name + '/print_message.txt', 'w') as f:
@@ -140,7 +141,7 @@ with open(model_name + '/print_message.txt', 'w') as f:
 	f.write("Number of validation data: " + str(X_validation.shape[0]) + "\n")
 
 query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
-num_layers, dropout = 6, 0.1
+num_layers, dropout = 8, 0.1
 lr, training_steps, batch_size, label_smoothing = 0.0004, 200000, 4096, 0.1
 ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
 
@@ -173,4 +174,10 @@ optimizer = torch.optim.Adam(model_standard.parameters(), lr=lr, betas=(0.9, 0.9
 warmup = 4000
 scheduler = WarmupCosineSchedule(optimizer, warmup, t_total=training_steps)
 
-train_seq2seq_training_steps(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)
+if torch.cuda.device_count() > 1:
+  print("Let's use", torch.cuda.device_count(), "GPUs!")
+  model_standard = nn.DataParallel(model_standard)
+  with open(model_name + '/print_message.txt', 'a') as f:
+  	f.write("Let's use " + str(torch.cuda.device_count()) + " GPUs!" + "\n")
+
+train_seq2seq_training_steps_DP(model_standard, X_train, X_valid_len, Y_train, Y_valid_len, working_score_tensor, lr, training_steps, batch_size, label_smoothing, amino_dict, device, model_name=model_name, warmup=scheduler, optimizer=optimizer, X_validation=X_validation, Y_validation=Y_validation, X_validation_valid_len=X_validation_valid_len, Y_validation_valid_len=Y_validation_valid_len)

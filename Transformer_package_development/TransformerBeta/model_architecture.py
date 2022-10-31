@@ -314,3 +314,17 @@ class EncoderDecoder(nn.Module):
         enc_outputs = self.encoder(enc_X, *args) 
         dec_state = self.decoder.init_state(enc_outputs, *args) 
         return self.decoder(dec_X, dec_state)
+
+
+
+class ProtT5_finetune(nn.Module):
+
+	def __init__(self, vocab_size, T5_model, **kwargs):
+		super(ProtT5_finetune, self).__init__(**kwargs)
+		self.T5_model = T5_model
+		self.dense = nn.Linear(1024, vocab_size)
+
+	def forward(self, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask=None):
+		outputs = self.T5_model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, decoder_attention_mask=decoder_attention_mask)
+		logits = self.dense(outputs.last_hidden_state)
+		return logits
