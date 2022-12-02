@@ -3,6 +3,7 @@ from torch import nn
 from d2l import torch as d2l
 import numpy as np
 from torch.distributions.categorical import Categorical
+import os
 
 
 amino_dict = {
@@ -144,7 +145,7 @@ def predict_greedy_batch(net, target_sequence_list, amino_dict, num_steps, devic
 
 
 
-def predict_greedy_minibatch(net, target_sequence_list, amino_dict, num_steps, device, num_minibatch):
+def predict_greedy_minibatch(net, target_sequence_list, amino_dict, num_steps, device, num_minibatch, print_info=False, output_file=None):
 
 	peptide_pred_list = []
 
@@ -155,6 +156,15 @@ def predict_greedy_minibatch(net, target_sequence_list, amino_dict, num_steps, d
 
 	for i in range(num_iter):
 
+		if i%10 == 0 and print_info == True:
+			print("Iteration: {}".format(i))
+			print("Number of peptide predicted: {}".format(num_minibatch*i))
+			if output_file != None:
+				if os.path.exists(output_file):
+					with open(output_file, 'a') as f:
+						f.write("Iteration: {}\n".format(i))
+						f.write("Number of peptide predicted: {}\n".format(num_minibatch*i))
+
 		if num_minibatch*i+num_minibatch > len(target_sequence_list):
 			peptide_pred = predict_greedy_batch(net, target_sequence_list[num_minibatch*i:], amino_dict, num_steps, device)
 			peptide_pred_list.append(peptide_pred)
@@ -162,9 +172,6 @@ def predict_greedy_minibatch(net, target_sequence_list, amino_dict, num_steps, d
 
 		peptide_pred = predict_greedy_batch(net, target_sequence_list[num_minibatch*i:num_minibatch*i+num_minibatch], amino_dict, num_steps, device)
 		peptide_pred_list.append(peptide_pred)
-
-		if i%1 == 0:
-			print("Iteration: {}".format(i))
 
 	peptide_pred_array = np.vstack(peptide_pred_list)
 	return peptide_pred_array
@@ -266,7 +273,7 @@ def evaluate_batch(net, target_sequence_raw, peptide_sequence_raw, amino_dict, n
 
 
 
-def evaluate_minibatch(net, target_sequence_list, peptide_sequence_list, amino_dict, num_steps, device, num_minibatch):
+def evaluate_minibatch(net, target_sequence_list, peptide_sequence_list, amino_dict, num_steps, device, num_minibatch, print_info = False, output_file = None):
 
 	target_peptide_list = []
 
@@ -276,6 +283,14 @@ def evaluate_minibatch(net, target_sequence_list, peptide_sequence_list, amino_d
 		num_iter = int(len(target_sequence_list)//num_minibatch + 1)
 
 	for i in range(num_iter):
+		if i%10 == 0 and print_info == True:
+			print("Iteration: {}".format(i))
+			print("Number of sequences evaluated: {}".format(num_minibatch*i))
+			if output_file != None:
+				if os.path.exists(output_file):
+					with open(output_file, 'a') as f:
+						f.write("Iteration: {}\n".format(i))
+						f.write("Number of sequences evaluated: {}\n".format(num_minibatch*i))
 
 		if num_minibatch*i+num_minibatch > len(target_sequence_list):
 			
@@ -285,9 +300,6 @@ def evaluate_minibatch(net, target_sequence_list, peptide_sequence_list, amino_d
 
 		target_peptide_eval = evaluate_batch(net, target_sequence_list[num_minibatch*i:num_minibatch*i+num_minibatch], peptide_sequence_list[num_minibatch*i:num_minibatch*i+num_minibatch], amino_dict, num_steps, device)
 		target_peptide_list.append(target_peptide_eval)
-
-		if i%1 == 0:
-			print("Iteration: {}".format(i))
 
 	target_peptide_array = np.vstack(target_peptide_list)
 	return target_peptide_array

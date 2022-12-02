@@ -95,42 +95,30 @@ for type in beta_strand_data:
 				AF_beta_strand_dataset.append([key, comp, beta_strand_data[type][length][key][comp], freq])
 AF_beta_strand_dataset = np.array(AF_beta_strand_dataset, dtype=object)
 
-dataset_indices = list(range(len(AF_beta_strand_dataset)))
-dataset_indices = np.array(dataset_indices)
+# plot the distribution of "freq == 1" count as bar chart, the interval is at 1, 10, 100, 1000, 10000, 100000
+count_distribution = np.zeros(6)
+for i in range(len(AF_beta_strand_dataset)):
+	if AF_beta_strand_dataset[i][3] == 1:
+		count = AF_beta_strand_dataset[i][2]
+		if count < 10:
+			count_distribution[0] += 1
+		elif count < 100:
+			count_distribution[1] += 1
+		elif count < 1000:
+			count_distribution[2] += 1
+		elif count < 10000:
+			count_distribution[3] += 1
+		elif count < 100000:
+			count_distribution[4] += 1
+		else:
+			count_distribution[5] += 1
+print("count distribution: " + str(count_distribution))
 
-# filter validation indices from the dataset: condition 1: freq = 1
-condition_freq = np.nonzero(np.array([freq==1 for freq in AF_beta_strand_dataset[:, -1]]))
-dataset_indices_unique = dataset_indices[condition_freq]
-
-# 4. build validation dataset of 10 fold of dataset_indices_unique
-# random shuffle the dataset_indices_unique
-np.random.seed(0)
-np.random.shuffle(dataset_indices_unique)
-validation_indices_folds = []
-for i in range(10):
-	validation_indices_folds.append(dataset_indices_unique[i*len(dataset_indices_unique)//10:(i+1)*len(dataset_indices_unique)//10])
-# fold 0
-validation_indices = validation_indices_folds[0]
-
-
-X_train = np.delete(AF_beta_strand_dataset[:, 0], validation_indices, axis=0)
-Y_train = np.delete(AF_beta_strand_dataset[:, 1], validation_indices, axis=0)
-X_validation = AF_beta_strand_dataset[validation_indices, 0]
-Y_validation = AF_beta_strand_dataset[validation_indices, 1]
-
-# save X_train and Y_train into a train_l7_anti folder as "X_train_fold0.npy" and "Y_train_fold0.npy"
-# save X_validation and Y_validation into a validation_l7_anti folder as "X_validation_fold0.npy" and "Y_validation_fold0.npy"
-if not os.path.exists("train_l7_anti"):
-	os.mkdir("train_l7_anti")
-if not os.path.exists("validation_l7_anti"):
-	os.mkdir("validation_l7_anti")
-np.save("train_l7_anti/X_train_fold0.npy", X_train)
-np.save("train_l7_anti/Y_train_fold0.npy", Y_train)
-
-np.save("validation_l7_anti/X_validation_fold0.npy", X_validation)
-np.save("validation_l7_anti/Y_validation_fold0.npy", Y_validation)
-
-# print statistics
-print("Number of training data: " + str(X_train.shape[0]))
-print("Number of unique data: ", len(dataset_indices_unique))
-print("Number of validation data: " + str(X_validation.shape[0]))
+plt.figure(figsize=(24, 16), facecolor=(1, 1, 1))
+plt.rcParams.update({'font.size': 25})
+plt.bar(['1-9', '10-99', '100-999', '1000-9999', '10000-99999', '100000+'], count_distribution, color='blue')
+plt.xlabel('Unique Count')
+plt.ylabel('Number of sequences')
+plt.title('Count distribution of sequences for unique anti-parallel beta strands with length 7')
+plt.savefig('count_unique_distribution_l7_anti.png', dpi=300)
+plt.close()

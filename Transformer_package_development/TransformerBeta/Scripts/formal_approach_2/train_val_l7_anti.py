@@ -98,17 +98,20 @@ AF_beta_strand_dataset = np.array(AF_beta_strand_dataset, dtype=object)
 dataset_indices = list(range(len(AF_beta_strand_dataset)))
 dataset_indices = np.array(dataset_indices)
 
-# filter validation indices from the dataset: condition 1: freq = 1
-condition_freq = np.nonzero(np.array([freq==1 for freq in AF_beta_strand_dataset[:, -1]]))
-dataset_indices_unique = dataset_indices[condition_freq]
+# filter training indices from the dataset: condition 1: count >= 5
+condition_count = np.nonzero(np.array([count >=5 for count in AF_beta_strand_dataset[:, -2]]))
+dataset_indices_high_count = dataset_indices[condition_count]
+AF_beta_strand_dataset = AF_beta_strand_dataset[dataset_indices_high_count, :]
+dataset_indices = list(range(len(AF_beta_strand_dataset)))
+dataset_indices = np.array(dataset_indices)
 
-# 4. build validation dataset of 10 fold of dataset_indices_unique
-# random shuffle the dataset_indices_unique
+# 4. build validation dataset of 10 fold of dataset_indices
+# random shuffle the dataset_indices
 np.random.seed(0)
-np.random.shuffle(dataset_indices_unique)
+np.random.shuffle(dataset_indices)
 validation_indices_folds = []
 for i in range(10):
-	validation_indices_folds.append(dataset_indices_unique[i*len(dataset_indices_unique)//10:(i+1)*len(dataset_indices_unique)//10])
+	validation_indices_folds.append(dataset_indices[i*len(dataset_indices)//10:(i+1)*len(dataset_indices)//10])
 # fold 0
 validation_indices = validation_indices_folds[0]
 
@@ -117,20 +120,32 @@ X_train = np.delete(AF_beta_strand_dataset[:, 0], validation_indices, axis=0)
 Y_train = np.delete(AF_beta_strand_dataset[:, 1], validation_indices, axis=0)
 X_validation = AF_beta_strand_dataset[validation_indices, 0]
 Y_validation = AF_beta_strand_dataset[validation_indices, 1]
+train_count = np.delete(AF_beta_strand_dataset[:, 2], validation_indices, axis=0)
+validation_count = AF_beta_strand_dataset[validation_indices, 2]
 
-# save X_train and Y_train into a train_l7_anti folder as "X_train_fold0.npy" and "Y_train_fold0.npy"
-# save X_validation and Y_validation into a validation_l7_anti folder as "X_validation_fold0.npy" and "Y_validation_fold0.npy"
+# combine X_train and Y_train into the dictionary
+# combine X_validation and Y_validation into the dictionary
+# record count as value
+train_dict = {}
+validation_dict = {}
+for i in range(len(X_train)):
+	if X_train[i] not in train_dict:
+		train_dict[X_train[i]] = {}
+	train_dict[X_train[i]][Y_train[i]] = train_count[i]
+for i in range(len(X_validation)):
+	if X_validation[i] not in validation_dict:
+		validation_dict[X_validation[i]] = {}
+	validation_dict[X_validation[i]][Y_validation[i]] = validation_count[i]
+
+
+# save train_dict and validation_dict
 if not os.path.exists("train_l7_anti"):
 	os.mkdir("train_l7_anti")
 if not os.path.exists("validation_l7_anti"):
 	os.mkdir("validation_l7_anti")
-np.save("train_l7_anti/X_train_fold0.npy", X_train)
-np.save("train_l7_anti/Y_train_fold0.npy", Y_train)
-
-np.save("validation_l7_anti/X_validation_fold0.npy", X_validation)
-np.save("validation_l7_anti/Y_validation_fold0.npy", Y_validation)
+np.save("train_l7_anti/train_dict_fold0.npy", train_dict)
+np.save("validation_l7_anti/validation_dict_fold0.npy", validation_dict)
 
 # print statistics
-print("Number of training data: " + str(X_train.shape[0]))
-print("Number of unique data: ", len(dataset_indices_unique))
+print("Number of training data (count>=5): " + str(X_train.shape[0]))
 print("Number of validation data: " + str(X_validation.shape[0]))
