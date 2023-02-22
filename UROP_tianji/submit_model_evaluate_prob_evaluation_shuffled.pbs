@@ -1,0 +1,10 @@
+#PBS -l walltime=48:00:00
+#PBS -l select=1:ncpus=1:mem=12gb
+#PBS -J 1-5
+
+module load anaconda3/personal
+module load cuda/11.1.1
+source activate UROP_transformer
+
+cd $PBS_O_WORKDIR
+python model_evaluate_prob_evaluation_shuffled.py

@@ -38,7 +38,7 @@ amino_dict = {
 		}
 
 
-train_dict = np.load('train_l7_anti/train_dict_fold0.npy', allow_pickle=True)
+train_dict = np.load('train_l8_anti/train_dict_fold0.npy', allow_pickle=True)
 train_dict = train_dict.tolist()
 train_list = []
 for target, value_dict in train_dict.items():
@@ -47,7 +47,7 @@ for target, value_dict in train_dict.items():
 train_array = np.array(train_list)
 
 # load validation data
-validation_dict = np.load('validation_l7_anti/validation_dict_fold0.npy', allow_pickle=True)
+validation_dict = np.load('validation_l8_anti/validation_dict_fold0.npy', allow_pickle=True)
 validation_dict = validation_dict.tolist()
 validation_list = []
 for target, value_dict in validation_dict.items():
@@ -55,7 +55,7 @@ for target, value_dict in validation_dict.items():
         validation_list.append([target, comp, count])
 validation_array = np.array(validation_list)
 
-number_validation_monitors = 5000
+number_validation_monitors = 10000
 
 X_train = train_array[:, 0]
 Y_train = train_array[:, 1]
@@ -65,7 +65,7 @@ Y_validation = validation_array[:number_validation_monitors, 1]
 
 
 # 5. split the data in training and validation
-num_steps_training = 9 # <------------------------------------------------------------------------change 
+num_steps_training = 10 # <------------------------------------------------------------------------change 
 
 X_train, X_valid_len, Y_train, Y_valid_len, X_validation, X_validation_valid_len, Y_validation, Y_validation_valid_len = preprocess_train(X_train, Y_train, amino_dict, num_steps_training, X_validation_letter=X_validation, Y_validation_letter=Y_validation)
 
@@ -78,18 +78,18 @@ working_score_tensor = torch.ones(X_train.shape[0], dtype=torch.float32) # equal
 # please specify:
 # 1. training_steps: 300k
 # 2. model_name:
-# 3. warmup_steps: 20k
+# 3. warmup_steps: 30k
 
-model_name = 'AF2_transformer_l12h768_validation_anti_l7_300ksteps'
+model_name = 'AF2_transformer_l6h512_validation_anti_l8_300ksteps'
 if not os.path.exists(model_name):
 	os.makedirs(model_name)
 
-query_size, key_size, value_size, num_hiddens = 768, 768, 768, 768
-num_layers, dropout = 12, 0.1
-lr, training_steps, batch_size, label_smoothing = 0.0002, 300000, 4096, 0.1
-ffn_num_input, ffn_num_hiddens, num_heads = 768, 3072, 8
+query_size, key_size, value_size, num_hiddens = 512, 512, 512, 512
+num_layers, dropout = 6, 0.1
+lr, training_steps, batch_size, label_smoothing = 0.0004, 300000, 4096, 0.1
+ffn_num_input, ffn_num_hiddens, num_heads = 512, 2048, 8
 
-norm_shape = [768] # 768 corresponds to the dim of such number to normalize
+norm_shape = [512] # 512 corresponds to the dim of such number to normalize
 device = d2l.try_gpu()
 
 encoder_standard = TransformerEncoder(
@@ -110,13 +110,13 @@ print('Standard model: total number of parameters: {}'.format(model_standard_tot
 print('Standard model: total number of trainable parameters: {}'.format(model_standard_total_trainable_params))
 
 optimizer = torch.optim.Adam(model_standard.parameters(), lr=lr, betas=(0.9, 0.98), eps = 1.0e-9)
-warmup = 20000
+warmup = 30000
 scheduler = WarmupCosineSchedule(optimizer, warmup, t_total=training_steps)
 
 # load a checkpoint
 resume = False # <------------------------------------------------------------------------change
 current_step = 0
-training_steps = 150000 # alter the training_steps to the number of steps you want to train # <------------------------------------------------------------------------change
+training_steps = 300000 # alter the training_steps to the number of steps you want to train # <------------------------------------------------------------------------change
 resume_path = '{}/AF2_transformer_l12h768_validation_anti_l7_1Msteps_checkpoint_22Dec01_0307AM.pt'.format(model_name) # <------------------------------------------------------------------------change
 if resume:
 	checkpoint = torch.load(resume_path)
