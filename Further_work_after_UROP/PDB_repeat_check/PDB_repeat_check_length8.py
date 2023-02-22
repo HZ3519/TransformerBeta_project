@@ -104,31 +104,34 @@ X_train_letter = X_train_letter[condition3]
 Y_train_letter = Y_train_letter[condition3]
 
 
-
-
 """---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"""
-"""Similarity weight histogram"""
-import numba
-# please spefify:
-numba.set_num_threads(48)
-threshold = 0.1
-
-# compute Levenshtein distance
+"""repeat check"""
 train_letter = [i+j for i, j in zip(X_train_letter, Y_train_letter)]
-train_letter = numba.typed.List(train_letter)
-MSA_weights_Levenshtein = compute_MSA_weights_Levenshtein(train_letter, threshold)
+validation_letter = [i+j for i, j in zip(X_validation_letter, Y_validation_letter)]
 
-file_time = time.strftime('%y%b%d_%I%M%p', time.gmtime())
+print("train letter repeat check: ", len(train_letter) == len(set(train_letter)))
+# pick out the repeated training sequence
+# save the index of the repeated sequence
+for i in train_letter:
+	if train_letter.count(i) > 1:
+		print(i)
+		print(train_letter.index(i))
+		print(train_letter.count(i))
 
-# save MSA weights
-# save MSA weights histogram
-plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
-plt.rcParams.update({'font.size': 15})
-plt.hist(MSA_weights_Levenshtein, bins=100, range=(0, 1), color='blue', edgecolor='black', linewidth=1.2)
-plt.xlabel('MSA weights')
-plt.ylabel('Frequency')
-plt.title('MSA weights histogram_{}%Identity_length8'.format((1-threshold)*100))
-plt.grid()
-plt.savefig('MSA_weights_Levenshtein_{}.png'.format(file_time))
+print("validation letter repeat check: ", len(validation_letter) == len(set(validation_letter)))
+# pick out the repeated validation sequence
+# save the index of the repeated sequence
+for i in validation_letter:
+	if validation_letter.count(i) > 1:
+		print(i)
+		print(validation_letter.index(i))
+		print(validation_letter.count(i))
 
-np.savetxt('MSA_weights_Levenshtein_{}.csv'.format(file_time), MSA_weights_Levenshtein, delimiter=',', fmt='%s')	
+print("train letter in validation letter check: ", len(set(train_letter).intersection(set(validation_letter))) == 0)
+# pick out the training sequence hat is also in the validation set
+for i in train_letter:
+	if i in validation_letter:
+		print(i)
+		print(train_letter.index(i))
+		print(validation_letter.index(i))
+
