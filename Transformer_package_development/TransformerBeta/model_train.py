@@ -42,7 +42,9 @@ class MaskedSoftmaxCELoss(nn.CrossEntropyLoss):
 		self.label_smoothing = label_smoothing
 		unmaskeded_loss = super(MaskedSoftmaxCELoss, self).forward(pred.permute(0, 2, 1), label)
 		masked_loss = (unmaskeded_loss * masks).mean(dim=1) # mean of each batch along num_steps
-
+		
+		if sample_weights is None:
+			return masked_loss.mean()
 		weighted_masked_loss = masked_loss * sample_weights
 		weighted_average_masked_loss = weighted_masked_loss.sum() / sample_weights.sum()  # weighted average across batch
 		return weighted_average_masked_loss
@@ -1033,6 +1035,7 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 		validation_score_hamming = []
 		validation_score_sequence_accuracy = []
 		validation_score_average_log_prob = []
+		validation_score_loss =[]
 
 		# here we modify the training steps to be the number of epochs
 		current_step = 0
@@ -1157,6 +1160,29 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 						with open(model_name + '/print_message.txt', 'a') as f:
 							f.write("training step {}, sequence accuracy: {}".format(current_step,sequence_accuracy) + '\n')
 
+						# calculate the validation loss on the whole validation set
+						net.train()
+						validation_loss = 0
+						for v_batch in zip(torch.split(X_validation, batch_size),
+										torch.split(X_validation_valid_len, batch_size),
+										torch.split(Y_validation, batch_size),
+										torch.split(Y_validation_valid_len, batch_size)):
+							X_validation_minibatch, X_validation_valid_len_minibatch, Y_validation_minibatch, Y_validation_valid_len_minibatch = [x.to(device) for x in v_batch]
+							bos = torch.tensor([amino_dict['<bos>']] * Y_validation_minibatch.shape[0],
+												device=device).reshape(-1, 1)
+							dec_input = torch.cat([bos, Y_validation_minibatch[:, :-1]], 1)
+							Y_hat_validation, _ = net(X_validation_minibatch, dec_input, X_validation_valid_len_minibatch)
+							l_validation = loss(Y_hat_validation, Y_validation_minibatch, Y_validation_valid_len_minibatch, None, label_smoothing)
+							validation_loss += l_validation.item() * Y_validation_valid_len_minibatch.sum().item()
+
+						validation_loss /= Y_validation_valid_len.sum().item()
+						validation_score_loss.append(validation_loss)
+						print("training step {}, validation loss: {}".format(current_step,validation_loss))
+						# save the print message to a a txt file in model name folder
+						with open(model_name + '/print_message.txt', 'a') as f:
+							f.write("training step {}, validation loss: {}".format(current_step,validation_loss) + '\n')
+						net.eval()
+
 						enc_outputs = net.module.encoder(X_validation, X_validation_valid_len)
 						dec_state = net.module.decoder.init_state(enc_outputs, X_validation_valid_len)
 						bos = torch.tensor([amino_dict['<bos>']] * Y_validation.shape[0], device=device).reshape(-1, 1)
@@ -1199,7 +1225,7 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 	plt.title("transformer <{}> training loss".format(model_name))
 	plt.grid()
 	plt.legend()
-	plt.savefig(model_name + '/{}_lossplot_{}.png'.format(model_name, file_time))
+	plt.savefig(model_name + '/{}_lossplot.png'.format(model_name))
 
 	if X_validation is not None:
 
@@ -1211,7 +1237,7 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 		plt.title("transformer <{}> validation hamming scores".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig(model_name + '/{}_validationplot_hamming_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_hamming.png'.format(model_name))
 
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
 		x = np.array(training_steps_count)
@@ -1221,7 +1247,17 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 		plt.title("transformer <{}> validation sequence accuracy".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig(model_name + '/{}_validationplot_sequence_accuracy_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_sequence_accuracy.png'.format(model_name))
+
+		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
+		x = np.array(training_steps_count)
+		plt.plot(x,validation_score_loss,label="validation_loss")
+		plt.xlabel('Training steps')
+		plt.ylabel('Validation loss')
+		plt.title("transformer <{}> validation loss".format(model_name))
+		plt.grid()
+		plt.legend()
+		plt.savefig(model_name + '/{}_validationplot_loss.png'.format(model_name))
 
 		plt.figure(figsize=(12, 8), facecolor=(1, 1, 1))
 		x = np.array(training_steps_count)
@@ -1231,7 +1267,7 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 		plt.title("transformer <{}> validation average log prob".format(model_name))
 		plt.grid()
 		plt.legend()
-		plt.savefig(model_name + '/{}_validationplot_average_log_prob_{}.png'.format(model_name, file_time))
+		plt.savefig(model_name + '/{}_validationplot_average_log_prob.png'.format(model_name))
 	
 	# save a checkpoint
 	model_state_dict = net.state_dict()
@@ -1255,8 +1291,9 @@ def train_seq2seq_training_steps_DP_checkpoint(net, X_train, X_valid_len, Y_trai
 	torch.save(net.state_dict(), model_name + '/' + file_name)
 
 	
-	np.savetxt(model_name + '/{}_training_loss_{}.csv'.format(model_name, file_time), training_loss, delimiter=',', fmt='%s')
+	np.savetxt(model_name + '/{}_training_loss.csv'.format(model_name), training_loss, delimiter=',', fmt='%s')
 	if X_validation is not None:
-		np.savetxt(model_name + '/{}_validation_score_hamming_{}.csv'.format(model_name, file_time), validation_score_hamming, delimiter=',', fmt='%s')
-		np.savetxt(model_name + '/{}_validation_score_sequence_accuracy_{}.csv'.format(model_name, file_time), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
-		np.savetxt(model_name + '/{}_validation_score_average_log_prob_{}.csv'.format(model_name, file_time), validation_score_average_log_prob, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_hamming.csv'.format(model_name), validation_score_hamming, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_sequence_accuracy.csv'.format(model_name), validation_score_sequence_accuracy, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_loss.csv'.format(model_name), validation_score_loss, delimiter=',', fmt='%s')
+		np.savetxt(model_name + '/{}_validation_score_average_log_prob.csv'.format(model_name), validation_score_average_log_prob, delimiter=',', fmt='%s')

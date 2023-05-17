@@ -85,17 +85,18 @@ def predict_greedy_single(net, target_sequence_raw, amino_dict, num_steps, devic
 		dec_X = Y.argmax(dim=2)
 		pred = dec_X.squeeze(dim=0).type(torch.int32).item()
 
+		if save_attention_weights:
+			attention_weight_seq.append(net.decoder.attention_weights())
+
+		if pred == amino_dict['<eos>']:
+			break
+
 		prob_i = torch.max(Y, dim=2).values.squeeze(dim=0).type(torch.float32).item()
 		prob *= prob_i
 
 		if print_info == True:
 			print("Conditional probability at position {} is {}".format(i+1, prob_i))
 
-		if save_attention_weights:
-			attention_weight_seq.append(net.decoder.attention_weights())
-
-		if pred == amino_dict['<eos>']:
-			break
 		output_seq.append(pred)
 
 	comple_peptide_pred = "".join([get_key(number, amino_dict) for number in output_seq])
@@ -126,7 +127,7 @@ def predict_greedy_batch(net, target_sequence_list, amino_dict, num_steps, devic
 
 	prob = torch.tensor([1] * target_sequence_batch.shape[0], device=device).reshape(-1, 1)
 
-	for i in range(num_steps-1):
+	for i in range(num_steps-2):
 
 		Y_raw, dec_state = net.decoder(dec_X, dec_state)
 		Y = softmax_layer(Y_raw)
@@ -138,7 +139,7 @@ def predict_greedy_batch(net, target_sequence_list, amino_dict, num_steps, devic
 
 	Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
 
-	comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred[:, 1:-1]]
+	comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred[:, 1:]]
 
 	final = zip(target_sequence_list, comple_peptide_pred, prob.reshape(-1).tolist())
 	return np.array(list(final))
@@ -209,7 +210,12 @@ def evaluate_single(net, target_sequence_raw, peptide_sequence_raw,amino_dict, n
 	
 		Y_raw, dec_state = net.decoder(dec_X, dec_state)
 		Y = softmax_layer(Y_raw)
-		dec_X = peptide_sequence_batch[:, i].reshape(1,-1) 
+		dec_X = peptide_sequence_batch[:, i].reshape(1,-1)
+		if save_attention_weights:
+			attention_weight_seq.append(net.decoder.attention_weights())
+
+		if peptide_sequence_unpad[i] == amino_dict['<eos>']:
+			break
 
 		index_i =  peptide_sequence_batch[:, i].squeeze(dim=0).item()
 		prob_i = Y[:, :, index_i].squeeze(dim=0).squeeze(dim=0).type(torch.float32).item()
@@ -217,12 +223,6 @@ def evaluate_single(net, target_sequence_raw, peptide_sequence_raw,amino_dict, n
 
 		if print_info == True:
 			print("Conditional probability at position {} is {}".format(i+1, prob_i))
-
-		if save_attention_weights:
-			attention_weight_seq.append(net.decoder.attention_weights())
-
-		if peptide_sequence_unpad[i] == amino_dict['<eos>']:
-			break
 
 	if print_info == True:
 		print('Input target sequence is {}, complementary peptide is {}'.format(target_sequence_raw, peptide_sequence_raw))
@@ -257,7 +257,7 @@ def evaluate_batch(net, target_sequence_raw, peptide_sequence_raw, amino_dict, n
 	
 	prob = torch.tensor([1] * target_sequence_batch.shape[0], device=device).reshape(-1, 1)
 
-	for i in range(num_steps-1): 
+	for i in range(num_steps-2): 
 		
 		Y_raw, dec_state = net.decoder(dec_X, dec_state)
 		Y = softmax_layer(Y_raw)
@@ -359,10 +359,10 @@ def sample_candidates(net, target_sequence_raw, num_candidates, amino_dict, num_
 		Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
 		samples_total += Y_pred.shape[0]
 
-		Y_raw, dec_state = net.decoder(dec_X, dec_state)
-		Y = softmax_layer(Y_raw)
-		prob_i = torch.max(Y, dim=2).values.squeeze(dim=0)
-		prob = torch.mul(prob, prob_i)
+		#Y_raw, dec_state = net.decoder(dec_X, dec_state)
+		#Y = softmax_layer(Y_raw)
+		#prob_i = torch.max(Y, dim=2).values.squeeze(dim=0)
+		#prob = torch.mul(prob, prob_i)
 
 		Y_pred = Y_pred[:, 1:] 
 		Y_pred_track = torch.cat((Y_pred_track, Y_pred), dim=0)
@@ -388,6 +388,126 @@ def sample_candidates(net, target_sequence_raw, num_candidates, amino_dict, num_
 		Y_pred_track = Y_pred_track[~(Y_pred_track == unk).any(1), :]		
 
 		if Y_pred_track.shape[0] >= num_candidates:
+
+			comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred_track] 
+
+			prob_track = prob_track.reshape(-1).tolist()
+
+			dtype = [('peptide', '<U21'), ('prob', float)]
+			values = list(zip(comple_peptide_pred, prob_track))
+
+			a = np.array(values, dtype=dtype)
+
+			final = list(np.sort(a, order='prob')[-1::-1])
+			final = final[0:num_candidates]
+			final_array = np.array([[str, prob] for str, prob in final])
+
+			print("number of total candidates sampled: {}".format(samples_total))
+			print("number of unique top candidates successfully sampled: {}".format(num_candidates))
+			return final_array
+			
+		num_remaining = num_candidates - Y_pred_track.shape[0]
+
+	comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred_track[:, 1:-1]]
+
+	prob_track = prob_track.reshape(-1).tolist()
+
+	dtype = [('peptide', '<U21'), ('prob', float)]
+	values = list(zip(comple_peptide_pred, prob_track))
+
+	a = np.array(values, dtype=dtype)
+	final = list(np.sort(a, order='prob')[-1::-1])
+	final_array = np.array([[str, prob] for str, prob in final])
+
+	print("number of total candidates sampled: {}".format(samples_total))
+	print("number of unique candidates successfully sampled: {}".format(len(final)))
+	return final_array
+
+
+
+def sample_single_candidate(net, target_sequence_raw, amino_dict, num_steps, device, max_iter=100):
+	"""Given one target sequence, sample a list of unique probable candidates."""
+
+	bos = amino_dict['<bos>']
+	eos = amino_dict['<eos>']
+	pad = amino_dict['<pad>']
+	unk = amino_dict['<unk>']
+	
+	net.eval()
+	softmax_layer = nn.Softmax(dim=2)
+	target_sequence = list(target_sequence_raw)
+
+	num_candidates = 1
+	num_remaining = num_candidates
+
+	Y_pred_track = torch.tensor([1] *(num_steps-2), device=device, dtype=torch.int32).reshape(1, -1) 
+	prob_track = torch.tensor([1], device=device, dtype=torch.long).reshape(1, 1)
+
+	target_sequence_unpad = [amino_dict[letter] for letter in target_sequence] + [amino_dict['<eos>']]
+
+	samples_total = 0
+
+	for j in range(max_iter):
+
+		target_valid_len = torch.tensor([len(target_sequence_unpad)], dtype=torch.long, device=device).repeat_interleave(num_remaining)
+		target_sequence = torch.tensor(d2l.truncate_pad(target_sequence_unpad, num_steps, amino_dict['<pad>']), dtype=torch.long, device=device)
+		target_sequence_batch = target_sequence.repeat(num_remaining, 1)
+
+		enc_outputs = net.encoder(target_sequence_batch, target_valid_len)
+		dec_state = net.decoder.init_state(enc_outputs, target_valid_len)
+
+		dec_X = torch.tensor([amino_dict['<bos>']] * target_sequence_batch.shape[0], device=device).reshape(-1, 1) 
+		
+		prob = torch.tensor([1] * target_sequence_batch.shape[0], dtype = torch.long, device=device).reshape(-1, 1)
+
+
+		for i in range(num_steps-2): 
+
+			Y_raw, dec_state = net.decoder(dec_X, dec_state)
+			Y = softmax_layer(Y_raw)
+			
+			m = Categorical(probs=Y)
+			dec_X = m.sample()
+			Y_pred = dec_X.type(torch.int32) 
+			
+			index = Y_pred.type(torch.int64)
+	
+			prob_i = torch.gather(Y, dim=2, index = index.unsqueeze(dim=2))
+			prob_i = prob_i.squeeze(dim=2).squeeze(dim=0)
+			prob = torch.mul(prob, prob_i)
+		
+		Y_pred = torch.cat((net.decoder.seqX, dec_X), dim=1).type(torch.int32)
+		samples_total += Y_pred.shape[0]
+
+		#Y_raw, dec_state = net.decoder(dec_X, dec_state)
+		#Y = softmax_layer(Y_raw)
+		#prob_i = torch.max(Y, dim=2).values.squeeze(dim=0)
+		#prob = torch.mul(prob, prob_i)
+
+		Y_pred = Y_pred[:, 1:] 
+		Y_pred_track = torch.cat((Y_pred_track, Y_pred), dim=0)
+		prob_track = torch.cat((prob_track, prob), dim=0)
+
+		if j==0:
+			Y_pred_track = Y_pred_track[1:, :]
+			prob_track = prob_track[1:, :]
+
+		Y_pred_track, unique_indices = unique(Y_pred_track, dim=0)
+		prob_track = prob_track[unique_indices] 
+		
+		prob_track = prob_track[~(Y_pred_track == bos).any(1), :]
+		Y_pred_track = Y_pred_track[~(Y_pred_track == bos).any(1), :]
+
+		prob_track = prob_track[~(Y_pred_track == eos).any(1), :]
+		Y_pred_track = Y_pred_track[~(Y_pred_track == eos).any(1), :]
+
+		prob_track = prob_track[~(Y_pred_track == pad).any(1), :]
+		Y_pred_track = Y_pred_track[~(Y_pred_track == pad).any(1), :]
+
+		prob_track = prob_track[~(Y_pred_track == unk).any(1), :]
+		Y_pred_track = Y_pred_track[~(Y_pred_track == unk).any(1), :]		
+
+		if Y_pred_track.shape[0] == num_candidates:
 
 			comple_peptide_pred = ["".join([get_key(number, amino_dict) for number in output_seq]) for output_seq in Y_pred_track] 
 

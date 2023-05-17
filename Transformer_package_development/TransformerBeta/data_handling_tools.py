@@ -7,6 +7,24 @@ def search_target(seq_list, seq):
 
 
 
+def search_target_similar(seq_list, seq, insimilarity_num = 0):
+	"""Search whether similar targets are in the dataset or not."""
+
+	similar_target_list = []
+
+	for i in range(len(seq_list)):
+		count = 0
+		for j in range(len(seq_list[i, 0])):
+			if seq_list[i, 0][j] != seq[j]:
+				count += 1
+		if count <= insimilarity_num:
+			list_with_count = seq_list[i].tolist() + [count]
+			similar_target_list.append(list_with_count)
+
+	return np.array(similar_target_list)
+
+
+
 def window_divide(sequence, windown_size):
 	"""Divide the sequence into windows."""
 
