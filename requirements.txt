@@ -32,4 +32,5 @@ transformers==4.23.1
 typing_extensions==4.3.0
 urllib3==1.26.10
 
-d2l==0.17.5
+# d2l==0.17.5
+d2l
