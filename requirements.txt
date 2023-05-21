@@ -32,7 +32,7 @@ cycler==0.11.0
 d2l==0.17.5
 # debugpy @ file:///home/builder/ci_310/debugpy_1640789504635/work
 # decorator @ file:///opt/conda/conda-bld/decorator_1643638310831/work
-DeepBeta==0.0.1
+# DeepBeta==0.0.1
 defusedxml==0.7.1
 dm-haiku==0.0.9
 dm-tree==0.1.8
