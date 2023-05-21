@@ -178,7 +178,7 @@ tornado @ file:///home/builder/ci_310/tornado_1640795392144/work
 tqdm==4.64.1
 traitlets==5.3.0
 # Editable install with no version control (TransformerBeta==0.0.1)
--e /rds/general/user/hz3519/home/UROP_project/Transformer_package_development
+# -e /rds/general/user/hz3519/home/UROP_project/Transformer_package_development
 transformers==4.23.1
 typing_extensions==4.3.0
 urllib3==1.26.10
