@@ -32,6 +32,7 @@ cycler==0.11.0
 # debugpy @ file:///home/builder/ci_310/debugpy_1640789504635/work
 # decorator @ file:///opt/conda/conda-bld/decorator_1643638310831/work
 # DeepBeta==0.0.1
+d2l==0.17.5
 defusedxml==0.7.1
 dm-haiku==0.0.9
 dm-tree==0.1.8
@@ -187,5 +188,3 @@ widgetsnbextension==3.6.1
 wrapt==1.14.1
 yarg==0.1.9
 yarl==1.8.1
-
-d2l==0.17.5
