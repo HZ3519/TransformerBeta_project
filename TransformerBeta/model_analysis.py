@@ -4,6 +4,7 @@ import pandas as pd
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 import scipy.spatial.distance as ssd
 from sklearn_extra.cluster import KMedoids
+from TransformerBeta.model_train import seq2num
 
 # optional for clusterings
 def compute_clustering_labels(peptide_candidates, amino_dict, optimal_clusters=2):
