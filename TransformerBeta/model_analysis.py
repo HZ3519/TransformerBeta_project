@@ -227,11 +227,11 @@ def generate_output_table(peptide_candidates, peptide_candidates_prob, reference
     # reverse each of the sequence in peptide_candidates
     peptide_candidates_synthesis = [peptide[::-1] for peptide in peptide_candidates]
     print('Peptides to be synthesized are constructed')
-
+    
     data = {
         'Rank': ranks,
         'Cluster Label': cluster_labels,
-        'Target Sequence': '',
+        'Target Sequence': [target]*len(peptide_candidates),  # repeat target string
         'Designed Complementary Peptide': peptide_candidates,
         'Synthesis Complementary Peptide': peptide_candidates_synthesis,
         'Probability': peptide_candidates_prob,
