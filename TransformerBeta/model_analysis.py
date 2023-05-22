@@ -2,6 +2,23 @@ import numpy as np
 from scipy.stats import percentileofscore
 import pandas as pd
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
+import scipy.spatial.distance as ssd
+from sklearn_extra.cluster import KMedoids
+
+# optional for clusterings
+def compute_clustering_labels(peptide_candidates, amino_dict, optimal_clusters=2):
+    peptide_candidates_num, peptide_candidates_num_copy = seq2num(peptide_candidates, peptide_candidates, amino_dict)
+
+    # Calculate the pairwise Hamming distance matrix
+    condensed_distance_matrix = ssd.pdist(peptide_candidates_num, 'hamming')
+    distance_matrix = ssd.squareform(condensed_distance_matrix)
+
+    # Compute clustering labels
+    kmedoids = KMedoids(n_clusters=optimal_clusters, init='k-medoids++', random_state=42, metric='precomputed')
+    cluster_labels = kmedoids.fit_predict(distance_matrix)
+
+    return cluster_labels
+
 
 def calculate_net_charge(peptide_list, reference_list=None):
     amino_positive = ['R', 'K', 'H']
