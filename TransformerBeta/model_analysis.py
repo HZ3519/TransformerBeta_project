@@ -183,6 +183,8 @@ def generate_output_table(peptide_candidates, peptide_candidates_prob, reference
     print('Clustering analysis Done')
     ranks = np.arange(1, len(peptide_candidates) + 1) 
     print('rank analysis Done')
+    print(reference_list)
+    print(reference_list is not None)
     if reference_list is not None:
         charge, charge_percentile = calculate_net_charge(peptide_candidates, reference_list)
         print('Net Charge Analysis Done')
