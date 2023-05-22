@@ -220,6 +220,10 @@ def generate_output_table(peptide_candidates, peptide_candidates_prob, reference
             novelty_score = calculate_novelty_scores(peptide_candidates, reference_list)
             target_novelty_score = ''
             print('Novelty Score Analysis Done')
+    else:
+        novelty_score = ''
+        target_novelty_score = ''
+        print('Novelty Score Analysis Done')
     # reverse each of the sequence in peptide_candidates
     peptide_candidates_synthesis = [peptide[::-1] for peptide in peptide_candidates]
     print('Peptides to be synthesized are constructed')
