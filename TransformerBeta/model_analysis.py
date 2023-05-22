@@ -179,28 +179,48 @@ def calculate_novelty_scores_and_reference_targets(peptide_list, reference_list,
 
     return np.array(novelty_scores), np.array(target_novelty_scores)
 
-def generate_output_table(peptide_candidates, peptide_candidates_prob, reference_list, output_file='output_table.xlsx', cluster_labels='', target = None, target_reference_list = None, target_novelty_score = ''):
+def generate_output_table(peptide_candidates, peptide_candidates_prob, reference_list, output_file='output_table.xlsx', cluster_labels='', target = None, target_reference_list = None):
     print('Clustering analysis Done')
     ranks = np.arange(1, len(peptide_candidates) + 1) 
     print('rank analysis Done')
-    charge, charge_percentile = calculate_net_charge(peptide_candidates, reference_list)
-    print('Net Charge Analysis Done')
-    hydrophobicity, hydrophobicity_percentile = calculate_hydrophobicity(peptide_candidates, kyte_doolittle_scale, reference_list)
-    print('Hydrophobicity Analysis Done')
-    molecular_weight, molecular_weight_percentile = calculate_molecular_weights(peptide_candidates, molecular_weights, reference_list)
-    print('Molecular Weight Analysis Done')
-    isoelectric_point, isoelectric_point_percentile = calculate_isoelectric_points(peptide_candidates, reference_list)
-    print('Isoelectric Point Analysis Done')
-    aromaticity, aromaticity_percentile = calculate_aromaticity(peptide_candidates, reference_list)
-    print('Aromaticity Analysis Done')
-    if target == None and target_reference_list == None and target_novelty_score == '':
-        novelty_score = calculate_novelty_scores(peptide_candidates, reference_list)
-        print('Novelty Score Analysis Done')
+    if reference_list is not None:
+        charge, charge_percentile = calculate_net_charge(peptide_candidates, reference_list)
+        print('Net Charge Analysis Done')
+        hydrophobicity, hydrophobicity_percentile = calculate_hydrophobicity(peptide_candidates, kyte_doolittle_scale, reference_list)
+        print('Hydrophobicity Analysis Done')
+        molecular_weight, molecular_weight_percentile = calculate_molecular_weights(peptide_candidates, molecular_weights, reference_list)
+        print('Molecular Weight Analysis Done')
+        isoelectric_point, isoelectric_point_percentile = calculate_isoelectric_points(peptide_candidates, reference_list)
+        print('Isoelectric Point Analysis Done')
+        aromaticity, aromaticity_percentile = calculate_aromaticity(peptide_candidates, reference_list)
+        print('Aromaticity Analysis Done')
     else:
-        novelty_score, target_novelty_score = calculate_novelty_scores_and_reference_targets(peptide_candidates, reference_list, target, target_reference_list)
-        print('Novelty Score and Target Novelty Score Analysis Done')
+        charge = calculate_net_charge(peptide_candidates)
+        charge_percentile = ''
+        print('Net Charge Analysis Done')
+        hydrophobicity = calculate_hydrophobicity(peptide_candidates, kyte_doolittle_scale)
+        hydrophobicity_percentile = ''
+        print('Hydrophobicity Analysis Done')
+        molecular_weight = calculate_molecular_weights(peptide_candidates, molecular_weights)
+        molecular_weight_percentile = ''
+        print('Molecular Weight Analysis Done')
+        isoelectric_point = calculate_isoelectric_points(peptide_candidates)
+        isoelectric_point_percentile = ''
+        print('Isoelectric Point Analysis Done')
+        aromaticity = calculate_aromaticity(peptide_candidates)
+        aromaticity_percentile = ''
+        print('Aromaticity Analysis Done')
+    if reference_list is not None:
+        if target_reference_list is not None:
+            novelty_score, target_novelty_score = calculate_novelty_scores_and_reference_targets(peptide_candidates, reference_list, target, target_reference_list)
+            print('Novelty Score and Target Novelty Score Analysis Done')
+        else:
+            novelty_score = calculate_novelty_scores(peptide_candidates, reference_list)
+            target_novelty_score = ''
+            print('Novelty Score Analysis Done')
     # reverse each of the sequence in peptide_candidates
     peptide_candidates_synthesis = [peptide[::-1] for peptide in peptide_candidates]
+    print('Peptides to be synthesized are constructed')
 
     data = {
         'Rank': ranks,
