@@ -2,9 +2,10 @@
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
+2. [Setup Guidance for Local Installation](#setup-guidance-for-local-installation)
+    - [Create a Virtual Environment](#create-a-virtual-environment)
+    - [Install the Required Packages and Dependencies](#install-the-required-packages-and-dependencies)
+    - [Clone the Repository and Install the TransformerBeta Package](#clone-the-repository-and-install-the-transformerbeta-package)
 3. [Usage](#usage)
 4. [Model Architecture](#model-architecture)
 5. [Results and Evaluation](#results-and-evaluation)
@@ -30,17 +31,27 @@ For accessing the model weights and corresponding training, validation, and test
 
 ## Setup Guidance of local installation
 
+This section provides instructions to setup the TransformerBeta project on your local machine.
+
 #### Create a virtual environment
 
-#### Install the required packages and dependencies
+Creating a virtual environment is recommended as it helps avoid conflicts between package dependencies. The below command can be used for creating a virtual environment in Python:
 
+python3 -m venv [name_of_virtual_environment]
+
+To activate your virtual environment, you can use the following commands based on your operating system:
+
+- For Windows: [name_of_virtual_environment]\Scripts\activate
+- For Unix or MacOS: source [name_of_virtual_environment]/bin/activate
+
+#### Install the dependencies and TransformerBeta package
+
+With the virtual environment activated, we can install the necessary packages and dependencies. Use the following commands to do so:
+
+git clone https://github.com/HZ3519/TransformerBeta_project.git
 pip install d2l==0.17.5 --no-deps
 pip install -r ./TransformerBeta_project/requirements.txt
-
-#### Clone the repository and install the TransformerBeta package
-
-
-
+pip install ./TransformerBeta_project
 
 ## Usage
 Include a few examples of how to use your project. This would typically include code snippets and screen shots.
