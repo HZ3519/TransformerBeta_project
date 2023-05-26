@@ -6,11 +6,9 @@
     - [Create a Virtual Environment](#create-a-virtual-environment)
     - [Install the Dependencies and TransformerBeta Package](#install-the-dependencies-and-transformerbeta-package)
 3. [Usage](#usage)
-4. [Model Architecture](#model-architecture)
-5. [Results and Evaluation](#results-and-evaluation)
-6. [Contribution](#contribution)
-7. [License](#license)
-8. [Acknowledgments](#acknowledgments)
+4. [Contribution](#contribution)
+5. [License](#license)
+6. [Citing our Research](#citing-our-research)
 
 ## Introduction
 
@@ -70,14 +68,12 @@ pip install ./TransformerBeta_project
 ```
 
 ## Usage
-Include a few examples of how to use your project. This would typically include code snippets and screen shots.
-
-
-## Results and Evaluation
-Discuss the results of the project and any evaluation metrics that you used to measure its success.
+To use the model, please refer to our guide, `TransformerBeta_project/notebooks/peptide_design_local.ipynb`. This notebook provides a detailed walkthrough of how to generate complementary peptide binders for a given peptide epitope. Various functionalities are made available to aid in the generation of complementary peptides for your epitope of interest.
 
 ## Contribution
-Outline the ways in which someone might contribute to your project, the process for submitting pull requests to you, and how they should report bugs or issues they find.
+Contributions to this project are always welcome! If you come across any bugs or issues, feel free to open an issue or submit a pull request. We appreciate your efforts in improving our project. For directly reporting bugs or issues, you can also reach out to:
+
+Haowen Zhao at haowen.zhao19@alumni.imperial.ac.uk
 
 ## License
 
