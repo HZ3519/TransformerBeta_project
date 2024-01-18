@@ -1,0 +1,13 @@
+# Ignore all files
+beta_strand.py
+
+
+# Ignore directories by name
+.__pycache__/
+.ipynb_checkpoints/
+AF2_beta_strand_database/
+BSn_libraries/
+datasets/
+Figures/
+models/
+TransformerBeta.egg-info/
