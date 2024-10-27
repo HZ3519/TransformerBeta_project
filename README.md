@@ -1,20 +1,10 @@
-# TransformerBeta: Complementary Peptide Generation using Transformer Architecture
-
-## Table of Contents
-1. [Introduction](#introduction)
-2. [Setup Guidance for Local Installation](#setup-guidance-for-local-installation)
-    - [Create a Virtual Environment](#create-a-virtual-environment)
-    - [Install the Dependencies and TransformerBeta Package](#install-the-dependencies-and-transformerbeta-package)
-3. [Usage](#usage)
-4. [Contribution](#contribution)
-5. [License](#license)
-6. [Citing our Research](#citing-our-research)
+# TransformerBeta
 
 ## Introduction
 
 TransformerBeta is a generative model based on Transformer architecture, developed to generate complementary binder for linear peptide epitopes of length 8 in an antiparallel beta strand conformation. The model is trained on a curated dataset of length 8 antiparallel beta strand pairs from the AF2 Beta Strand Database.
 
-![TransformerBeta.png](data:image/png;base64,iVBO)
+![TransformerBeta.png](./media/Figure_strategy.png)
 
 This page provides instructions for local installation and usage of TransformerBeta.
 
