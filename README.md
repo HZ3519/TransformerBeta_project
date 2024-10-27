@@ -2,15 +2,11 @@
 
 ![TransformerBeta](./media/design_strategy.png)
 
-paper: [Computational design of target-specific linear peptide binders with TransformerBeta](https://arxiv.org/abs/2410.16302)
+Paper: [Computational design of target-specific linear peptide binders with TransformerBeta](https://arxiv.org/abs/2410.16302)
 
 ## Introduction
 
-TransformerBeta is a generative model based on Transformer architecture, developed to generate complementary binder for linear peptide epitopes of length 8 in an antiparallel beta strand conformation. The model is trained on a curated dataset of length 8 antiparallel beta strand pairs from the AF2 Beta Strand Database.
-
-This page provides instructions for local installation and usage of TransformerBeta.
-
-For detailed insight into TransformerBeta, we suggest referring to our research paper (yet to be released). 
+TransformerBeta is a transformer-based languege model for designing linear binders for linear peptide epitopes of length 8 in an antiparallel beta strand conformation. The model is trained on a curated dataset of length 8 antiparallel beta strand pairs from the AF2 Beta Strand Database.
 
 To use TransformerBeta effortlessly without installation, visit: [TransformerBeta on Google Colab](https://colab.research.google.com/github/HZ3519/TransformerBeta/blob/main/notebooks/peptide_design_colab.ipynb)
 
