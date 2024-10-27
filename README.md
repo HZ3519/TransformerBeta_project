@@ -1,6 +1,6 @@
 # TransformerBeta
 
-![TransformerBeta](./media/Figure_strategy.png)
+![TransformerBeta](./media/design_strategy.png)
 
 paper: [Computational design of target-specific linear peptide binders with TransformerBeta](https://arxiv.org/abs/2410.16302)
 
