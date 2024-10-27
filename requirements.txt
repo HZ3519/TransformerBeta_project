@@ -4,7 +4,7 @@ biopython==1.81
 # huggingface-hub==0.10.1
 matplotlib==3.5.1
 numba==0.55.2
-numpy==1.21.5
+numpy==1.23.0
 pandas==1.4.3
 pip-tools==6.13.0
 scikit-learn==1.1.3
