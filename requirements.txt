@@ -1,7 +1,5 @@
 bertviz==1.4.0
 biopython==1.81
-# d2l==0.17.5
-# huggingface-hub==0.10.1
 matplotlib==3.5.1
 numba==0.55.2
 numpy==1.23.0
@@ -14,10 +12,5 @@ seaborn==0.12.1
 sentencepiece==0.1.96
 torch==1.12.0
 torchvision==0.13.0
-
-#d2l
 jupyter==1.0.0
-numpy==1.21.5
-matplotlib==3.5.1
 requests==2.25.1
-# pandas==1.2.4
